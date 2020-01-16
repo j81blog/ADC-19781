@@ -3,7 +3,7 @@ Several checks for CVE-2019-19781
 
 
 ## Module installation 
-Download the two files and put them in one of the following locations:
+Download the two files (ADC-19781.psd1 & ADC-19781.psm1) and put them in one of the following locations:
 - C:\Users\\%USERNAME%\Documents\WindowsPowerShell\Modules\ADC-19781
 - C:\Program Files\WindowsPowerShell\Modules\ADC-19781
 
