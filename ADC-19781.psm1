@@ -278,7 +278,7 @@ function ADCTestExploit {
         }     
     }
     try {
-        $response = Invoke-RestMethod @params
+        $null = Invoke-RestMethod @params
         Write-Host -ForegroundColor Red "Mitigation NOT applied, got StatusCode: $($_.Exception.Response.StatusCode.value__)" -ErrorAction Stop
         $return = $false
     } catch {
