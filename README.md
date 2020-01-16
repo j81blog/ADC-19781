@@ -48,6 +48,13 @@ NOTE: You can optionaly specify the -Credential <Credential> parameter, if not c
 Execute some test to fid out if you are possibly hacked, this wil not give 100% certanty.
 This is based on currently known facts.
 
+This function requires the use of Posh-SSH, please install before use.
+https://www.powershellgallery.com/packages/Posh-SSH
+
+```powershell
+Install-Module Posh-SSH
+```
+
 ```powershell
 SYNTAX
     ADCFindIfHacked [-ManagementURL] <uri> [-Credential] <pscredential>
