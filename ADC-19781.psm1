@@ -421,8 +421,6 @@ NOTE: The script is of my own and not the opinion of my employer!
 
     $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
 
-    Write-Warning  "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
-
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
     Write-Host -ForegroundColor White  "`r`nThis command should return an error or no files, if not the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
@@ -432,6 +430,14 @@ NOTE: The script is of my own and not the opinion of my employer!
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
     Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+
+    $ShellCommand = 'shell ls /netscaler/portal/templates/*.xml'
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+
+    Write-Host -ForegroundColor White  "`r`nAttempts to exploit the system leave traces in the Apache httpaccess log files"
+    Write-Warning  "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
@@ -452,6 +458,7 @@ NOTE: The script is of my own and not the opinion of my employer!
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    
     $Normal = @"
 `r`nDone
 SHELL=/bin/sh
