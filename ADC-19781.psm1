@@ -5,6 +5,7 @@
 #https://isc.sans.edu/forums/diary/Some+Thoughts+About+the+Critical+Citrix+ADCGateway+Vulnerability+CVE201919781/25660
 #http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
 
+
 function Connect-ADC {
     [cmdletbinding()]
     param(
@@ -258,6 +259,7 @@ function ADCTestExploit {
         [switch]$PassThru
 
     )
+    #requires -version 5.1
     $return = $false
     $exception = $null
     $params = @{
@@ -309,9 +311,9 @@ function ADCCheckMitigation {
         [ValidateNotNull()]
         [System.Management.Automation.PSCredential]
         [System.Management.Automation.Credential()]
-        $Credential = [System.Management.Automation.PSCredential]::Empty
+        $Credential
     )
-    
+    #requires -version 5.1
 
     $mitigation = $false
     $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
@@ -411,10 +413,11 @@ NOTE: The script is of my own and not the opinion of my employer!
 
 "@
     $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
-    if ($ADCSession.Version -like "12.1.50.28*") {
-        Write-Warning "An issue resides in version 12.1.50.28, Responder policies might not work correctly [NSHELP-18311]"
+    if (($ADCSession.Version -like "*12.1*") -and ($ADCSession.Version -like "*50.28*")) {
+        Write-Warning "An issue resides in version 12.1 build 50.28, Responder policies might not work correctly [NSHELP-18311]"
         Write-Warning "You still might be vulnerable to CVE-2019-19781"
     }
+    Write-Host "Current version $($ADCSession.Version)"
 
     $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
 
@@ -513,8 +516,8 @@ root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
 
     $Normal = @"
  Done
-nsmonitor 75080  3.2  0.7 39092 12104  ??  S    Sun11AM 189:08.67 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=ad,dc=j81,dc=nl;bdn=svc_ldapread@domain.local;password=**********;
-nsmonitor 19865  2.3  0.9 39092 14404  ??  S    Mon06PM  75:45.64 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=ad,dc=j81,dc=nl;bdn=svc_ldapread@domain.local;password=**********;
+nsmonitor 75080  3.2  0.7 39092 12104  ??  S    Sun11AM 189:08.67 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;
+nsmonitor 19865  2.3  0.9 39092 14404  ??  S    Mon06PM  75:45.64 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;
 nsmonitor  1510  0.0  0.5 36188  7828  ??  S     1Jan20   5:04.00 /usr/bin/perl -w /netscaler/monitors/nssf.pl acctservice=0;storename=Store;backendserver=0;
 root      12510  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps -aux | grep perl \n
 root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
@@ -570,9 +573,7 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
 
 "@
 
-
-    
     Write-Host -ForegroundColor White "Finished"
 
-    Write-Warning "Please also check Firewall logs! Atackers might use a compromised NetScaler as a jump host."
+    Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
 }
