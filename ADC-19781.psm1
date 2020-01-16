@@ -316,51 +316,74 @@ function ADCCheckMitigation {
     #requires -version 5.1
 
     $mitigation = $false
+    $VersionOK = $false
     $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
     $response = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type responderpolicy
-
-    $ResponderPolicies = $response.responderpolicy | Where-Object { ($_.rule -like '*HTTP.REQ.URL.DECODE_USING_TEXT_MODE.CONTAINS("/vpns/")*') -and ($_.rule -like '*!CLIENT.SSLVPN.IS_SSLVPN*') -and ($_.rule -like '*HTTP.REQ.URL.DECODE_USING_TEXT_MODE.CONTAINS("/../")*') }
-    if ([string]::IsNullOrEmpty($ResponderPolicies)) {
-        Write-Host -ForegroundColor Red "No valid Responder Policy found!"
-    } else { 
-        ForEach ($ResponderPolicy in $ResponderPolicies) {
-            Write-Host -ForegroundColor Green "Responder Policy found that matched [$($ResponderPolicy.name)]"
-            $rsa = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type responderaction -Filter @{name = "/$($ResponderPolicy.action)/" }
-            $rspbinding = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type responderpolicy_binding -Resource "$($ResponderPolicy.name)"
-            if (($rsa.responderaction.target -like "*403*") -or ($rsa.responderaction.target -like "*404*")) {
-                Write-Host -ForegroundColor Green "Responder Action found that matched [$($rsa.responderaction.name)]"
-                if ($rspbinding.responderpolicy_binding.responderpolicy_responderglobal_binding.priority -match [regex]"^[\d\.]+$") {
-                    Write-Host -ForegroundColor Green "Responder Policy is globaly bound [$($rspbinding.responderpolicy_binding.responderpolicy_responderglobal_binding.priority)]"
-                    $mitigation = $true
+    ""
+    Write-Warning "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder"
+    Write-Warning "and rewrite policies bound to VPN virtual servers causing them not to process the packets that"
+    Write-Warning "matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
+    Write-Warning "steps to apply properly."
+    Write-Host -ForegroundColor Yellow "`r`nCurrent version $($ADCSession.Version)`r`n"
+    $versions = $ADCSession.Version | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
+    $version = "{0}.{1}" -f $versions.Matches.Value[0], $versions.Matches.Value[1]
+    if ($version -like "12.1.*") {
+        if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
+            Write-Warning "You still might be vulnerable to CVE-2019-19781!"
+            Write-Warning "Upgrade to a version higher than 12.1 build 51.16"
+            $VersionOK = $false
+        } else {
+            Write-Host "Citrix ADC / NetScaler version OK"
+            $VersionOK = $true
+        }
+    } else {
+        Write-Host "Citrix ADC / NetScaler version OK"
+        $VersionOK = $true
+    }
+    ""
+    if ($VersionOK) {
+        $ResponderPolicies = $response.responderpolicy | Where-Object { ($_.rule -like '*HTTP.REQ.URL.DECODE_USING_TEXT_MODE.CONTAINS("/vpns/")*') -and ($_.rule -like '*!CLIENT.SSLVPN.IS_SSLVPN*') -and ($_.rule -like '*HTTP.REQ.URL.DECODE_USING_TEXT_MODE.CONTAINS("/../")*') }
+        if ([string]::IsNullOrEmpty($ResponderPolicies)) {
+            Write-Host -ForegroundColor Red "No valid Responder Policy found!"
+        } else { 
+            ForEach ($ResponderPolicy in $ResponderPolicies) {
+                Write-Host -ForegroundColor Green "Responder Policy found that matched [$($ResponderPolicy.name)]"
+                $rsa = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type responderaction -Filter @{name = "/$($ResponderPolicy.action)/" }
+                $rspbinding = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type responderpolicy_binding -Resource "$($ResponderPolicy.name)"
+                if (($rsa.responderaction.target -like "*403*") -or ($rsa.responderaction.target -like "*404*")) {
+                    Write-Host -ForegroundColor Green "Responder Action found that matched [$($rsa.responderaction.name)]"
+                    if ($rspbinding.responderpolicy_binding.responderpolicy_responderglobal_binding.priority -match [regex]"^[\d\.]+$") {
+                        Write-Host -ForegroundColor Green "Responder Policy is globaly bound [$($rspbinding.responderpolicy_binding.responderpolicy_responderglobal_binding.priority)]"
+                        $mitigation = $true
+                    } else {
+                        Write-Host -ForegroundColor Red "Responder Policy is NOT globaly bound [$($rspbinding.responderpolicy_binding.responderpolicy_responderglobal_binding.priority)]"
+                    }
                 } else {
-                    Write-Host -ForegroundColor Red "Responder Policy is NOT globaly bound [$($rspbinding.responderpolicy_binding.responderpolicy_responderglobal_binding.priority)]"
+                    Write-Host -ForegroundColor Red "Responder Action NOT found!"
                 }
-            } else {
-                Write-Host -ForegroundColor Red "Responder Action NOT found!"
+            }
+            try {
+                if ($mitigation) {
+                    $payload = @{"filename" = "rc.netscaler"; "filelocation" = "/nsconfig/" }
+                    $content = $null
+                    $response = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type systemfile -Arguments $payload -ErrorAction Stop
+                    if (-Not ([String]::IsNullOrWhiteSpace($response.systemfile.filecontent))) {
+                        $content = [System.Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($response.systemfile.filecontent))
+                    }
+                    if ($content -like "*nsapimgr_wr.sh -ys skip_systemaccess_policyeval=0*") {
+                        Write-Host -ForegroundColor Green "rc.netscaler file is modified"
+                        $mitigation = $true
+                    } else {
+                        Write-Host -ForegroundColor Red "rc.netscaler file is NOT modified, please execute:`r`n`r`nshell `"sed -i '' '/skip_systemaccess_policyeval=0/d' /nsconfig/rc.netscaler`"`r`n`r`nAnd reboot your netscaler, view `"https://support.citrix.com/article/CTX267679`" for more information"
+                        $mitigation = $false
+                    }
+                } 
+            } catch {
+                Write-Host -ForegroundColor Red "Could not verify the /nsconfig/rc.netscaler, please verify manually!"
+                $mitigation = $false
             }
         }
-        try {
-            if ($mitigation) {
-                $payload = @{"filename" = "rc.netscaler"; "filelocation" = "/nsconfig/" }
-                $content = $null
-                $response = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type systemfile -Arguments $payload -ErrorAction Stop
-                if (-Not ([String]::IsNullOrWhiteSpace($response.systemfile.filecontent))) {
-                    $content = [System.Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($response.systemfile.filecontent))
-                }
-                if ($content -like "*nsapimgr_wr.sh -ys skip_systemaccess_policyeval=0*") {
-                    Write-Host -ForegroundColor Green "rc.netscaler file is modified"
-                    $mitigation = $true
-                } else {
-                    Write-Host -ForegroundColor Red "rc.netscaler file is NOT modified, please execute:`r`n`r`nshell `"sed -i '' '/skip_systemaccess_policyeval=0/d' /nsconfig/rc.netscaler`"`r`n`r`nAnd reboot your netscaler, view `"https://support.citrix.com/article/CTX267679`" for more information"
-                    $mitigation = $false
-                }
-            } 
-        } catch {
-            Write-Host -ForegroundColor Red "Could not verify the /nsconfig/rc.netscaler, please verify manually!"
-            $mitigation = $false
-        }
     }
-
     if ($mitigation) {
         Write-Host -ForegroundColor Green "Mitigation successfully applied"
         return $true
@@ -404,21 +427,35 @@ Please verify manually if there is any doubt!
 This "Test" is based on information found by the community, many thanks to all who have provided the information.
 Sources:
 - https://support.citrix.com/article/CTX267027
-- https://nerdscaler.com/
-- https://isc.sans.edu/
-- https://ctxpro.com/
+- https://nerdscaler.com/2020/01/13/citrix-adc-cve-2019-19781-exploited-what-now/amp/
+- https://isc.sans.edu/forums/diary/Citrix+ADC+Exploits+are+Public+and+Heavily+Used+Attempts+to+Install+Backdoor/25700
+- https://ctxpro.com/are-people-mining-bitcoin-on-your-netscaler-adc-using-cve-2019-19781/
+- http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
 
 NOTE: The script is of my own and not the opinion of my employer!
 
 
 "@
     $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
-    if (($ADCSession.Version -like "*12.1*") -and ($ADCSession.Version -like "*50.28*")) {
-        Write-Warning "An issue resides in version 12.1 build 50.28, Responder policies might not work correctly [NSHELP-18311]"
-        Write-Warning "You still might be vulnerable to CVE-2019-19781"
+    ""
+    Write-Warning "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder"
+    Write-Warning "and rewrite policies bound to VPN virtual servers causing them not to process the packets that"
+    Write-Warning "matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
+    Write-Warning "steps to apply properly."
+    Write-Host -ForegroundColor Yellow "`r`nCurrent version $($ADCSession.Version)`r`n"
+    $versions = $ADCSession.Version | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
+    $version = "{0}.{1}" -f $versions.Matches.Value[0], $versions.Matches.Value[1]
+    if ($version -like "12.1.*") {
+        if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
+            Write-Warning "You still might be vulnerable to CVE-2019-19781!"
+            Write-Warning "Upgrade to a version higher than 12.1 build 51.16"
+        } else {
+            Write-Host "Citrix ADC / NetScaler version OK"
+        }
+    } else {
+        Write-Host "Citrix ADC / NetScaler version OK"
     }
-    Write-Host "Current version $($ADCSession.Version)"
-
+    ""
     $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
 
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
@@ -437,7 +474,10 @@ NOTE: The script is of my own and not the opinion of my employer!
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     Write-Host -ForegroundColor White  "`r`nAttempts to exploit the system leave traces in the Apache httpaccess log files"
+
     Write-Warning  "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
+
+    Write-Host -ForegroundColor White  "`r`nChecking Apache httpaccess log files"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
@@ -458,7 +498,29 @@ NOTE: The script is of my own and not the opinion of my employer!
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-    
+
+    $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+
+    $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+
+    $ShellCommand = 'shell cat /var/log/bash.log | grep nobody'
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
+    Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
+    Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+
+    $ShellCommand = 'shell gzcat /var/log/bash.*.gz | grep nobody'
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n(shell gzcat /var/log/bash.*.gz | grep nobody):"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+
     $Normal = @"
 `r`nDone
 SHELL=/bin/sh
@@ -518,7 +580,6 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
         Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-
     }
     
     $Normal = @"
@@ -554,31 +615,6 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
     Write-Host -ForegroundColor White "`r`nTop 10 running processes, only NSPPE-xx should have high CPU`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-
-    $ShellCommand = 'shell cat /var/log/bash.log | grep nobody'
-
-
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
-    Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
-    Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
-    Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-
-    $ShellCommand = 'shell gzcat /var/log/bash.*.gz | grep nobody'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
-    Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n(shell gzcat /var/log/bash.*.gz | grep nobody):"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-
-    $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
-    Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-
-    $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
-    Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
-
 
 
     Write-Host -ForegroundColor White "Finished"
