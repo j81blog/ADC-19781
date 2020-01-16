@@ -22,7 +22,7 @@ External test to check if you have successfully applied the mitigation
 
 ```powershell
 SYNTAX
-    ADCTestExploit [-Uri] <string> [-PassThru]
+    ADCTestExploit [-Uri] <string>
 ```
 
 ```powershell
