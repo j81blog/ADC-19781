@@ -479,6 +479,19 @@ HOME=/var/log
     Write-Host -ForegroundColor White "`r`ncrontab Output`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
+    $Normal = @"
+ Done
+root:*:0:0:Charlie &:/root:/usr/bin/bash
+nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
+daemon:*:1:1:Owner of many system processes:/root:/nonexistent
+operator:*:2:20:System &:/nonexistent:/nonexistent
+bin:*:3:7:Binaries Commands and Source,,,:/:/nonexistent
+nobody:*:65534:65534:Unprivileged user:/nonexistent:/nonexistent
+sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent
+nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent
+ Done
+
+"@
     $ShellCommand = 'shell cat /etc/passwd'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
     Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
@@ -559,19 +572,7 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
-    $Normal = @"
-Done
-root:*:0:0:Charlie &:/root:/usr/bin/bash
-nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
-daemon:*:1:1:Owner of many system processes:/root:/nonexistent
-operator:*:2:20:System &:/nonexistent:/nonexistent
-bin:*:3:7:Binaries Commands and Source,,,:/:/nonexistent
-nobody:*:65534:65534:Unprivileged user:/nonexistent:/nonexistent
-sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent
-nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent
- Done
 
-"@
 
     Write-Host -ForegroundColor White "Finished"
 
