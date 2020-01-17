@@ -24,29 +24,7 @@ function Connect-ADC {
 
     if ($ManagementURL -like "https://*") {
         #Write-ToLogFile -D -C Connect-ADC -M "SSL Connection, Trusting all certificates."
-        $Provider = New-Object Microsoft.CSharp.CSharpCodeProvider
-        $Provider.CreateCompiler() | Out-Null
-        $Params = New-Object System.CodeDom.Compiler.CompilerParameters
-        $Params.GenerateExecutable = $false
-        $Params.GenerateInMemory = $true
-        $Params.IncludeDebugInformation = $false
-        $Params.ReferencedAssemblies.Add("System.DLL") > $null
-        $TASource = @'
-            namespace Local.ToolkitExtensions.Net.CertificatePolicy
-            {
-                public class TrustAll : System.Net.ICertificatePolicy
-                {
-                    public bool CheckValidationResult(System.Net.ServicePoint sp,System.Security.Cryptography.X509Certificates.X509Certificate cert, System.Net.WebRequest req, int problem)
-                    {
-                        return true;
-                    }
-                }
-            }
-'@ 
-        $TAResults = $Provider.CompileAssemblyFromSource($Params, $TASource)
-        $TAAssembly = $TAResults.CompiledAssembly
-        $TrustAll = $TAAssembly.CreateInstance("Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll")
-        [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
+        Ignore-SSLCertificates
     }
     #Write-ToLogFile -I -C Connect-ADC -M "Connecting to $ManagementURL..."
     try {
@@ -114,6 +92,34 @@ function Connect-ADC {
     }
 }
 
+function Ignore-SSLCertificates {
+    $Provider = New-Object Microsoft.CSharp.CSharpCodeProvider
+    $Provider.CreateCompiler() | Out-Null
+    $Params = New-Object System.CodeDom.Compiler.CompilerParameters
+    $Params.GenerateExecutable = $false
+    $Params.GenerateInMemory = $true
+    $Params.IncludeDebugInformation = $false
+    $Params.ReferencedAssemblies.Add("System.DLL") > $null
+    $TASource = @'
+        namespace Local.ToolkitExtensions.Net.CertificatePolicy
+        {
+            public class TrustAll : System.Net.ICertificatePolicy
+            {
+                public bool CheckValidationResult(System.Net.ServicePoint sp,System.Security.Cryptography.X509Certificates.X509Certificate cert, System.Net.WebRequest req, int problem)
+                {
+                    return true;
+                }
+            }
+        }
+'@ 
+    $TAResults = $Provider.CompileAssemblyFromSource($Params, $TASource)
+    $TAAssembly = $TAResults.CompiledAssembly
+    ## We create an instance of TrustAll and attach it to the ServicePointManager
+    $TrustAll = $TAAssembly.CreateInstance("Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll")
+    [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
+    [Net.ServicePointManager]::SecurityProtocol = 'TLS11', 'TLS12', 'ssl3'
+}
+
 function Invoke-ADCRestApi {
     [CmdletBinding()]
     param (
@@ -146,6 +152,7 @@ function Invoke-ADCRestApi {
         [ValidateSet('EXIT', 'CONTINUE', 'ROLLBACK')]
         [String]$OnErrorAction = 'EXIT'
     )
+    Ignore-SSLCertificates
     # https://github.com/devblackops/NetScaler
     if ([String]::IsNullOrEmpty($($Session.ManagementURL))) {
         #Write-ToLogFile -E -C Invoke-ADCRestApi -M "Probably not logged into the Citrix ADC!"
@@ -260,6 +267,7 @@ function ADCTestExploit {
 
     )
     #requires -version 5.1
+    Ignore-SSLCertificates
     $return = $false
     $exception = $null
     $params = @{
@@ -314,7 +322,7 @@ function ADCCheckMitigation {
         $Credential
     )
     #requires -version 5.1
-
+    Ignore-SSLCertificates
     $mitigation = $false
     $VersionOK = $false
     $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
@@ -401,6 +409,9 @@ function ADCFindIfHacked {
         [ValidatePattern('^(http[s]?)(:\/\/)([^\s,]+)')]
         [System.URI]$ManagementURL,
 
+        [parameter(Mandatory = $false)]
+        [Int32]$TimeOut = 300,
+
         [parameter(Mandatory = $true)]    
         [ValidateNotNull()]
         [System.Management.Automation.PSCredential]
@@ -408,16 +419,13 @@ function ADCFindIfHacked {
         $Credential
     )
     #requires -version 5.1
+    Ignore-SSLCertificates
     try {
-        Get-Module Posh-SSH -ErrorAction Stop
+        Import-Module Posh-ssh -ErrorAction Stop
     } catch {
-        try {
-            Install-Module Posh-SSH -ErrorAction Stop
-        } catch {
-            Write-Warning "Please install the PowerShell Module Posh-SSH, execute: `"Install-Module Posh-SSH`""
-            Write-Warning "This is required to connect top the Citrix ADC / NetScaler to perfom some tests!"
-            Exit 1
-        }
+        Write-Warning "Please install the PowerShell Module Posh-SSH, execute: `"Install-Module Posh-SSH`""
+        Write-Warning "This is required to connect top the Citrix ADC / NetScaler to perfom some tests!"
+        Exit 1
     }
 
     Write-Warning @"
@@ -456,20 +464,20 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host "Citrix ADC / NetScaler version OK"
     }
     ""
-    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
+    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential -AcceptKey
 
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nThis command should return an error or no files, if not the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell ls /var/vpn/bookmark/*.xml'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell ls /netscaler/portal/templates/*.xml'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
@@ -480,44 +488,44 @@ NOTE: The script is of my own and not the opinion of my employer!
     Write-Host -ForegroundColor White  "`r`nChecking Apache httpaccess log files"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep "/\.\./"'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep vpns | grep xml'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep "/\.\./"'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell cat /var/log/bash.log | grep nobody'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
     Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
     Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/bash.*.gz | grep nobody'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n(shell gzcat /var/log/bash.*.gz | grep nobody):"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
@@ -544,7 +552,7 @@ HOME=/var/log
 
     
     $ShellCommand = 'shell cat /etc/crontab'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`ncrontab Output`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
@@ -562,7 +570,7 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
 
 "@
     $ShellCommand = 'shell cat /etc/passwd'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
     Write-Host -ForegroundColor Green $Normal
@@ -577,7 +585,7 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
     Write-Host -ForegroundColor White "Check if users have cron jobs assigned.`r`nThe ERROR response just means that these users have no cron jobs assigned, which is normal behavior."
     ForEach ($User in $Users) {
         $ShellCommand = $("shell crontab -u {0} -l" -f $User)
-        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
     }
@@ -589,7 +597,7 @@ root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
 
 "@
     $ShellCommand = 'shell ps -aux | grep python'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`npython scripts`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
     Write-Host -ForegroundColor Green $Normal
@@ -605,14 +613,14 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
 
 "@
     $ShellCommand = 'shell ps -aux | grep perl'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nperl scripts`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare (not all scripts are bad, if in doubt verify)."
     Write-Host -ForegroundColor Green $Normal
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
     $ShellCommand = 'shell top -n 10'
-    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nTop 10 running processes, only NSPPE-xx should have high CPU`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
