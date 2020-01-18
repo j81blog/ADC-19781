@@ -6,6 +6,35 @@
 #http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
 
 
+function Ignore-SSLCertificates {
+    $Provider = New-Object Microsoft.CSharp.CSharpCodeProvider
+    $Provider.CreateCompiler() | Out-Null
+    $Params = New-Object System.CodeDom.Compiler.CompilerParameters
+    $Params.GenerateExecutable = $false
+    $Params.GenerateInMemory = $true
+    $Params.IncludeDebugInformation = $false
+    $Params.ReferencedAssemblies.Add("System.DLL") > $null
+    $TASource = @'
+        namespace Local.ToolkitExtensions.Net.CertificatePolicy
+        {
+            public class TrustAll : System.Net.ICertificatePolicy
+            {
+                public bool CheckValidationResult(System.Net.ServicePoint sp,System.Security.Cryptography.X509Certificates.X509Certificate cert, System.Net.WebRequest req, int problem)
+                {
+                    return true;
+                }
+            }
+        }
+'@ 
+    $TAResults = $Provider.CompileAssemblyFromSource($Params, $TASource)
+    $TAAssembly = $TAResults.CompiledAssembly
+    ## We create an instance of TrustAll and attach it to the ServicePointManager
+    $TrustAll = $TAAssembly.CreateInstance("Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll")
+    [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
+    $AllProtocols = [Enum]::GetValues([System.Net.SecurityProtocolType])
+    [System.Net.ServicePointManager]::SecurityProtocol = $AllProtocols
+}
+
 function Connect-ADC {
     [cmdletbinding()]
     param(
@@ -90,35 +119,6 @@ function Connect-ADC {
     if ($PassThru) {
         return $session
     }
-}
-
-function Ignore-SSLCertificates {
-    $Provider = New-Object Microsoft.CSharp.CSharpCodeProvider
-    $Provider.CreateCompiler() | Out-Null
-    $Params = New-Object System.CodeDom.Compiler.CompilerParameters
-    $Params.GenerateExecutable = $false
-    $Params.GenerateInMemory = $true
-    $Params.IncludeDebugInformation = $false
-    $Params.ReferencedAssemblies.Add("System.DLL") > $null
-    $TASource = @'
-        namespace Local.ToolkitExtensions.Net.CertificatePolicy
-        {
-            public class TrustAll : System.Net.ICertificatePolicy
-            {
-                public bool CheckValidationResult(System.Net.ServicePoint sp,System.Security.Cryptography.X509Certificates.X509Certificate cert, System.Net.WebRequest req, int problem)
-                {
-                    return true;
-                }
-            }
-        }
-'@ 
-    $TAResults = $Provider.CompileAssemblyFromSource($Params, $TASource)
-    $TAAssembly = $TAResults.CompiledAssembly
-    ## We create an instance of TrustAll and attach it to the ServicePointManager
-    $TrustAll = $TAAssembly.CreateInstance("Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll")
-    [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
-    $AllProtocols = [Enum]::GetValues([System.Net.SecurityProtocolType])
-    [System.Net.ServicePointManager]::SecurityProtocol = $AllProtocols
 }
 
 function Invoke-ADCRestApi {
@@ -795,9 +795,11 @@ function ADCFindIfHacked {
 .EXAMPLE
     PS C:\> ADCCheckMitigation -ManagementURL "https://cns001.domain.local"
     Executing all check on Citrix ADC / NetScaler "cns001.domain.local" via https
+.OUTPUTS
+    Results of the commands executed against a Citrix ADC / NetScaler
 .NOTES
     Function Name : ADCFindIfHacked.ps1
-    Version       : v0.7.1
+    Version       : v0.7.2
     Author        : John Billekens
     Requires      : PowerShell v5.1 and up
                     Posh-SSH (v2.2)
@@ -888,7 +890,7 @@ NOTE: The script is of my own and not the opinion of my employer!
 
             }
         } else {
-            Write-Host "Citrix ADC / NetScaler version OK"
+            Write-Host -ForegroundColor Green "Citrix ADC / NetScaler version OK"
             Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
         }
         ""
@@ -959,6 +961,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -966,6 +969,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -988,6 +992,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n($ShellCommand):"
         Write-ToLogFile -I -C $null -M "Bash logs, commands running as nobody could indicate an attack."
         Write-ToLogFile -W -M "NOTE: But beware, these logs rotate rather quickly (1-2 days)"
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -1075,6 +1080,7 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
         Write-ToLogFile -I -C Example -M $Normal
         $ShellCommand = 'shell cat /etc/passwd'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -1131,6 +1137,7 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
         Write-ToLogFile -I -C Example -M $Normal
         $ShellCommand = 'shell ps -aux | grep perl'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -1153,6 +1160,7 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         Write-ToLogFile -I -C Example -M $Normal
         $ShellCommand = 'shell ps auxd | grep nobody'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -1161,6 +1169,7 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         Write-ToLogFile -I -C $null -M "Top 10 running processes, only NSPPE-xx should have high CPU"
         $ShellCommand = 'shell top -n 10'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
