@@ -257,6 +257,367 @@ function Invoke-ADCRestApi {
     }
 }
 
+function CleanOutput {
+    [cmdletbinding()]
+    param(
+        [parameter(Position = 0)]
+        [String[]]$Data
+    )
+    [String[]]$Output = @()
+    ForEach ($Line in $data) {
+        if (-Not ($Line -Like " Done")) {
+            $Output += $Line
+        }
+    }
+    if ([String]::IsNullOrWhiteSpace($Output)) {
+        $Output = "NO RESULTS FOUND"
+    }
+    if ($Output -eq "ERROR: ") {
+        $Output = "NOT FOUND"
+    }
+    return $Output
+}
+
+function Write-ToLogFile {
+    <#
+.SYNOPSIS
+    Write messages to a log file.
+.DESCRIPTION
+    Write info to a log file.
+.PARAMETER Message
+    The message you want to have written to the log file.
+.PARAMETER Block
+    If you have a (large) block of data you want to have written without Date/Component tags, you can specify this parameter.
+.PARAMETER E
+    Define the Message as an Error message.
+.PARAMETER W
+    Define the Message as a Warning message.
+.PARAMETER I
+    Define the Message as an Informational message.
+    Default value: This is the default value for all messages if not otherwise specified.
+.PARAMETER D
+    Define the Message as a Debug Message
+.PARAMETER Component
+    If you want to have a Component name in your log file, you can specify this parameter.
+    Default value: Name of calling script
+.PARAMETER DateFormat
+    The date/time stamp used in the LogFile.
+    Default value: "yyyy-MM-dd HH:mm:ss:ffff"
+.PARAMETER NoDate
+    If NoDate is defined, no date String will be added to the log file.
+    Default value: False
+.PARAMETER Show
+    Show the Log Entry only to console.
+.PARAMETER LogFile
+    The FileName of your log file.
+    You can also define a (Global) variable in your script $LogFile, the function will use this path instead (if not specified with the command).
+    Default value: <ScriptRoot>\Log.txt or if $PSScriptRoot is not available .\Log.txt
+.PARAMETER Delimiter
+    Define your Custom Delimiter of the log file.
+    Default value: <TAB>
+.PARAMETER LogLevel
+    The Log level you want to have specified.
+    With LogLevel: Error; Only Error (E) data will be written or shown.
+    With LogLevel: Warning; Only Error (E) and Warning (W) data will be written or shown.
+    With LogLevel: Info; Only Error (E), Warning (W) and Info (I) data will be written or shown.
+    With LogLevel: Debug; All, Error (E), Warning (W), Info (I) and Debug (D) data will be written or shown.
+    With LogLevel: None; Nothing will be written to disk or screen.
+    You can also define a (Global) variable in your script $LogLevel, the function will use this level instead (if not specified with the command)
+    Default value: Info
+.PARAMETER NoLogHeader
+    Specify parameter if you don't want the log file to start with a header.
+    Default value: False
+.PARAMETER WriteHeader
+    Only Write header with info to the log file.
+.PARAMETER ExtraHeaderInfo
+    Specify a String with info you want to add to the log header.
+.PARAMETER NewLog
+    Force to start a new log, previous log will be removed.
+.EXAMPLE
+    Write-ToLogFile "This message will be written to a log file"
+    To write a message to a log file just specify the following command, it will be a default informational message.
+.EXAMPLE
+    Write-ToLogFile -E "This message will be written to a log file"
+    To write a message to a log file just specify the following command, it will be a error message type.
+.EXAMPLE
+    Write-ToLogFile "This message will be written to a log file" -NewLog
+    To start a new log file (previous log file will be removed)
+.EXAMPLE
+    Write-ToLogFile "This message will be written to a log file"
+    If you have the variable $LogFile defined in your script, the Write-ToLogFile function will use that LofFile path to write to.
+    E.g. $LogFile = "C:\Path\LogFile.txt"
+.NOTES
+    Function Name : Write-ToLogFile
+    Version       : v0.2.6
+    Author        : John Billekens
+    Requires      : PowerShell v5.1 and up
+.LINK
+    https://blog.j81.nl
+#>
+    #requires -version 5.1
+
+    [CmdletBinding(DefaultParameterSetName = "Info")]
+    Param
+    (
+        [Parameter(ParameterSetName = "Error", ValueFromPipeline, Mandatory = $true, Position = 0)]
+        [Parameter(ParameterSetName = "Warning", ValueFromPipeline, Mandatory = $true, Position = 0)]
+        [Parameter(ParameterSetName = "Info", ValueFromPipeline, Mandatory = $true, Position = 0)]
+        [Parameter(ParameterSetName = "Debug", ValueFromPipeline, Mandatory = $true, Position = 0)]
+        [ValidateNotNullOrEmpty()]
+        [Alias("M")]
+        [String[]]$Message,
+
+        [Parameter(ParameterSetName = "Block", Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [Alias("B")]
+        [object[]]$Block,
+
+        [Parameter(ParameterSetName = "Block", Mandatory = $false)]
+        [Alias("BI")]
+        [Switch]$BlockIndent,
+
+        [Parameter(ParameterSetName = "Error")]
+        [Switch]$E,
+
+        [Parameter(ParameterSetName = "Warning")]
+        [Switch]$W,
+
+        [Parameter(ParameterSetName = "Info")]
+        [Switch]$I,
+
+        [Parameter(ParameterSetName = "Debug")]
+        [Switch]$D,
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [Alias("C")]
+        [String]$Component = $(try { $(Split-Path -Path $($MyInvocation.ScriptName) -Leaf) } catch { "LOG" }),
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [Alias("ND")]
+        [Switch]$NoDate,
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [ValidateNotNullOrEmpty()]
+        [Alias("DF")]
+        [String]$DateFormat = "yyyy-MM-dd HH:mm:ss:ffff",
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [Parameter(ParameterSetName = "Block")]
+        [Alias("S")]
+        [Switch]$Show,
+
+        [String]$LogFile = "$PSScriptRoot\Log.txt",
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [String]$Delimiter = "`t",
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [ValidateSet("Error", "Warning", "Info", "Debug", "None", IgnoreCase = $false)]
+        [String]$LogLevel,
+
+        [Parameter(ParameterSetName = "Error")]
+        [Parameter(ParameterSetName = "Warning")]
+        [Parameter(ParameterSetName = "Info")]
+        [Parameter(ParameterSetName = "Debug")]
+        [Parameter(ParameterSetName = "Block")]
+        [Alias("NH", "NoHead")]
+        [Switch]$NoLogHeader,
+        
+        [Parameter(ParameterSetName = "Head")]
+        [Alias("H", "Head")]
+        [Switch]$WriteHeader,
+
+        [Alias("HI")]
+        [String]$ExtraHeaderInfo = $null,
+
+        [Alias("NL")]
+        [Switch]$NewLog
+    )
+    begin {
+        # Set Message Type to Informational if nothing is defined.
+        if ((-Not $I) -and (-Not $W) -and (-Not $E) -and (-Not $D) -and (-Not $Block) -and (-Not $WriteHeader)) {
+            $I = $true
+        }
+        #Check if a log file is defined in a Script. If defined, get value.
+        try {
+            $LogFileVar = Get-Variable -Scope Global -Name LogFile -ValueOnly -ErrorAction Stop
+            if (-Not [String]::IsNullOrWhiteSpace($LogFileVar)) {
+                $LogFile = $LogFileVar
+            
+            }
+        } catch {
+            #Continue, no script variable found for LogFile
+        }
+        #Check if a LogLevel is defined in a script. If defined, get value.
+        try {
+            if ([String]::IsNullOrEmpty($LogLevel) -and (-Not $Block) -and (-Not $WriteHeader)) {
+                $LogLevelVar = Get-Variable -Scope Global -Name LogLevel -ValueOnly -ErrorAction Stop
+                $LogLevel = $LogLevelVar
+            }
+        } catch { 
+            if ([String]::IsNullOrEmpty($LogLevel) -and (-Not $Block)) {
+                $LogLevel = "Info"
+            }
+        }
+        if (-Not ($LogLevel -eq "None")) {
+            #Check if LogFile parameter is empty
+            if ([String]::IsNullOrWhiteSpace($LogFile)) {
+                if (-Not $Show) {
+                    Write-Warning "Messages not written to log file, LogFile path is empty!"
+                }
+                #Only Show Entries to Console
+                $Show = $true
+            } else {
+                #If Not Run in a Script "$PSScriptRoot" wil only contain "\" this will be changed to the current directory
+                $ParentPath = Split-Path -Path $LogFile -Parent -ErrorAction SilentlyContinue
+                if (([String]::IsNullOrEmpty($ParentPath)) -or ($ParentPath -eq "\")) {
+                    $LogFile = $(Join-Path -Path $((Get-Item -Path ".\").FullName) -ChildPath $(Split-Path -Path $LogFile -Leaf))
+                }
+            }
+            Write-Verbose "LogFile: $LogFile"
+            #Define Log Header
+            if (-Not $Show) {
+                if (
+                    (-Not ($NoLogHeader -eq $True) -and (-Not (Test-Path -Path $LogFile -ErrorAction SilentlyContinue))) -or 
+                    (-Not ($NoLogHeader -eq $True) -and ($NewLog)) -or
+                    ($WriteHeader)) {
+                    $LogHeader = @"
+**********************
+LogFile: $LogFile
+Start time: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Username: $([Security.Principal.WindowsIdentity]::GetCurrent().Name)
+RunAs Admin: $((New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
+Machine: $($Env:COMPUTERNAME) ($([System.Environment]::OSVersion.VersionString))
+PSCulture: $($PSCulture)
+PSVersion: $($PSVersionTable.PSVersion)
+PSEdition: $($PSVersionTable.PSEdition)
+PSCompatibleVersions: $($PSVersionTable.PSCompatibleVersions -join ', ')
+BuildVersion: $($PSVersionTable.BuildVersion)
+PSCommandPath: $($PSCommandPath)
+LanguageMode: $($ExecutionContext.SessionState.LanguageMode)
+"@
+                    if (-Not [String]::IsNullOrEmpty($ExtraHeaderInfo)) {
+                        $LogHeader += "`r`n"
+                        $LogHeader += $ExtraHeaderInfo.TrimEnd("`r`n")
+                    }
+                    $LogHeader += "`r`n**********************`r`n"
+
+                } else {
+                    $LogHeader = $null
+                }
+            }
+        } else {
+            Write-Verbose "LogLevel is set to None!"
+        }
+        #Define date String to start log message with. If NoDate is defined no date String will be added to the log file.
+        if (-Not ($LogLevel -eq "None")) {
+            if (-Not ($NoDate) -and (-Not $Block) -and (-Not $WriteHeader)) {
+                $DateString = "{0}{1}" -f $(Get-Date -Format $DateFormat), $Delimiter
+            } else {
+                $DateString = $null
+            }
+            if (-Not [String]::IsNullOrEmpty($Component) -and (-Not $Block) -and (-Not $WriteHeader)) {
+                $Component = " {0}{1}{0}" -f $Delimiter, $Component.ToUpper()
+            } else {
+                $Component = "{0}{0}" -f $Delimiter
+            }
+            #Define the log sting for the Message Type
+            if ($Block -or $WriteHeader) {
+                $WriteLog = $true
+            } elseif ($E -and (($LogLevel -eq "Error") -or ($LogLevel -eq "Warning") -or ($LogLevel -eq "Info") -or ($LogLevel -eq "Debug"))) {
+                Write-Verbose -Message "LogType: [Error], LogLevel: [$LogLevel]"
+                $MessageType = "ERROR"
+                $WriteLog = $true
+            } elseif ($W -and (($LogLevel -eq "Warning") -or ($LogLevel -eq "Info") -or ($LogLevel -eq "Debug"))) {
+                Write-Verbose -Message "LogType: [Warning], LogLevel: [$LogLevel]"
+                $MessageType = "WARN "
+                $WriteLog = $true
+            } elseif ($I -and (($LogLevel -eq "Info") -or ($LogLevel -eq "Debug"))) {
+                Write-Verbose -Message "LogType: [Info], LogLevel: [$LogLevel]"
+                $MessageType = "INFO "
+                $WriteLog = $true
+            } elseif ($D -and (($LogLevel -eq "Debug"))) {
+                Write-Verbose -Message "LogType: [Debug], LogLevel: [$LogLevel]"
+                $MessageType = "DEBUG"
+                $WriteLog = $true
+            } else {
+                Write-Verbose -Message "No Log entry is made, LogType: [Error: $E, Warning: $W, Info: $I, Debug: $D] LogLevel: [$LogLevel]"
+                $WriteLog = $false
+            }
+        } else {
+            $WriteLog = $false
+        }
+    } process {
+
+    } end {
+        #Write the line(s) of text to a file.
+        if ($WriteLog) {
+            if ($WriteHeader) {
+                $LogString = $LogHeader
+            } elseif ($Block) {
+                if ($BlockIndent) {
+                    $BlockLineStart = "{0}{0}{0}" -f $Delimiter
+                } else {
+                    $BlockLineStart = ""
+                }
+                if ($Block -is [System.String]) {
+                    $LogString = "{0]{1}" -f $BlockLineStart, $Block.Replace("`r`n", "`r`n$BlockLineStart")
+                } else {
+                    $LogString = "{0}{1}" -f $BlockLineStart, $($Block | Out-String).Replace("`r`n", "`r`n$BlockLineStart")
+                }
+                $LogString = "$($LogString.TrimEnd("$BlockLineStart").TrimEnd("`r`n"))`r`n"
+            } else {
+                $LogString = "{0}{1}{2}{3}" -f $DateString, $MessageType, $Component, $($Message | Out-String)
+            }
+            if ($Show) {
+                "$($LogString.TrimEnd("`r`n"))"
+                Write-Verbose -Message "Data shown in console, not written to file!"
+
+            } else {
+                if (($LogHeader) -and (-Not $WriteHeader)) {
+                    $LogString = "{0}{1}" -f $LogHeader, $LogString
+                }
+                try {
+                    if ($NewLog) {
+                        try {
+                            Remove-Item -Path $LogFile -Force -ErrorAction Stop
+                            Write-Verbose -Message "Old log file removed"
+                        } catch {
+                            Write-Verbose -Message "Could not remove old log file, trying to append"
+                        }
+                    }
+                    [System.IO.File]::AppendAllText($LogFile, $LogString, [System.Text.Encoding]::Unicode)
+                    Write-Verbose -Message "Data written to LogFile:`r`n         `"$LogFile`""
+                } catch {
+                    #If file cannot be written, give an error
+                    Write-Error -Category WriteError -Message "Could not write to file `"$LogFile`""
+                }
+            }
+        } else {
+            Write-Verbose -Message "Data not written to file!"
+        }
+    }
+}
+
+
 function ADCTestExploit {
     [cmdletbinding()]
     param(
@@ -326,6 +687,7 @@ function ADCCheckMitigation {
     Ignore-SSLCertificates
     $mitigation = $false
     $VersionOK = $false
+
     $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
     $response = Invoke-ADCRestApi -Session $ADCSession -Method GET -Type responderpolicy
     ""
@@ -403,6 +765,7 @@ function ADCCheckMitigation {
 
 }
 
+
 function ADCFindIfHacked {
     [cmdletbinding()]
     param(
@@ -420,12 +783,11 @@ function ADCFindIfHacked {
         $Credential
     )
     #requires -version 5.1
-    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
     try {
         Import-Module Posh-ssh -ErrorAction Stop
     } catch {
         Write-Warning "Please install the PowerShell Module Posh-SSH, execute: `"Install-Module Posh-SSH`""
-        Write-Warning "This is required to connect top the Citrix ADC / NetScaler to perfom some tests!"
+        Write-Warning "This is required to connect top the Citrix ADC / NetScaler to perform some tests!"
         throw "Posh-SSH not install, please install module Posh-SSH to continue"
     }
 
@@ -445,9 +807,10 @@ NOTE: The script is of my own and not the opinion of my employer!
 
 
 "@
+    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
     $ShellCommand = 'show version'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    $Versions = ($Output.Output).TrimStart(" Done`r`n").Replace("`t", "") | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
+    $Versions = (CleanOutput -Data $Output.Output).Replace("`t", "") | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
     $version = "{0}.{1}" -f $versions.Matches.Value[0], $versions.Matches.Value[1]
     ""
     Write-Warning "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder"
@@ -469,17 +832,17 @@ NOTE: The script is of my own and not the opinion of my employer!
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nThis command should return an error or no files, if not the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell ls /var/vpn/bookmark/*.xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell ls /netscaler/portal/templates/*.xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     Write-Host -ForegroundColor White  "`r`nAttempts to exploit the system leave traces in the Apache httpaccess log files"
 
@@ -490,47 +853,47 @@ NOTE: The script is of my own and not the opinion of my employer!
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep "/\.\./"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep vpns | grep xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep "/\.\./"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell cat /var/log/bash.log | grep nobody'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
     Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
     Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/bash.*.gz | grep nobody'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n(shell gzcat /var/log/bash.*.gz | grep nobody):"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $Normal = @"
-`r`nDone
+
 SHELL=/bin/sh
 PATH=/netscaler:/etc:/bin:/sbin:/usr/bin:/usr/sbin
 HOME=/var/log
@@ -544,7 +907,6 @@ HOME=/var/log
 1,31    0-5     *       *       *       root    adjkerntz -a
 *       *       *       *       *       root    nsfsyncd -p
 49       0-23       *       *       *       root    nslog.sh dozip
- Done
 
 "@
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
@@ -554,10 +916,10 @@ HOME=/var/log
     $ShellCommand = 'shell cat /etc/crontab'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`ncrontab Output`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $Normal = @"
- Done
+
 root:*:0:0:Charlie &:/root:/usr/bin/bash
 nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
 daemon:*:1:1:Owner of many system processes:/root:/nonexistent
@@ -566,7 +928,6 @@ bin:*:3:7:Binaries Commands and Source,,,:/:/nonexistent
 nobody:*:65534:65534:Unprivileged user:/nonexistent:/nonexistent
 sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent
 nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent
- Done
 
 "@
     $ShellCommand = 'shell cat /etc/passwd'
@@ -574,7 +935,7 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
     Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
     Write-Host -ForegroundColor Green $Normal
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $OutputUsers = ($Output.Output)
     $Users = @()
@@ -587,11 +948,11 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
         $ShellCommand = $("shell crontab -u {0} -l" -f $User)
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
-        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
     }
     
     $Normal = @"
- Done
+
 root      12507  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps -aux | grep python \n
 root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
 
@@ -601,10 +962,10 @@ root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
     Write-Host -ForegroundColor White "`r`npython scripts`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
     Write-Host -ForegroundColor Green $Normal
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $Normal = @"
- Done
+
 nsmonitor 75080  3.2  0.7 39092 12104  ??  S    Sun11AM 189:08.67 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;
 nsmonitor 19865  2.3  0.9 39092 14404  ??  S    Mon06PM  75:45.64 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;
 nsmonitor  1510  0.0  0.5 36188  7828  ??  S     1Jan20   5:04.00 /usr/bin/perl -w /netscaler/monitors/nssf.pl acctservice=0;storename=Store;backendserver=0;
@@ -617,15 +978,15 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
     Write-Host -ForegroundColor White "`r`nperl scripts`r`nCommand Executed: '$ShellCommand':"
     Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare (not all scripts are bad, if in doubt verify)."
     Write-Host -ForegroundColor Green $Normal
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell top -n 10'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nTop 10 running processes, only NSPPE-xx should have high CPU`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
 
 
-    Write-Host -ForegroundColor White "Finished"
-
+    Write-Host -ForegroundColor White "Finished`r`n"
     Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
+    "`r`n`r`n"
 }
