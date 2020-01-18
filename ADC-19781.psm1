@@ -937,6 +937,8 @@ NOTE: The script is of my own and not the opinion of my employer!
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
         Write-ToLogFile -I -C $null -M "Bash logs, commands running as nobody could indicate an attack."
+        Write-Host -ForegroundColor Green  "INFO: Messages like `"<Local7.notice> ns bash[3632]: nobody on (null) shell_command=`"uname -a`"`" could indicate a hack attempt"
+        Write-ToLogFile -I -C Example -M "Messages like `"<Local7.notice> ns bash[3632]: nobody on (null) shell_command=`"uname -a`"`" could indicate a hack attempt"
         Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
         Write-ToLogFile -W -M "Beware, these logs rotate rather quickly (1-2 days)"
         Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
@@ -983,8 +985,39 @@ HOME=/var/log
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+        if (([version]$version).Major -eq 13) {
+            $Normal = @"
 
-        $Normal = @"
+# `$FreeBSD: release/8.4.0/etc/master.passwd 243948 2012-12-06 11:54:25Z rwatson $
+#
+root:*:0:0:Charlie &:/root:/usr/bin/bash
+nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
+daemon:*:1:1:Owner of many system processes:/root:/usr/sbin/nologin
+operator:*:2:5:System &:/:/usr/sbin/nologin
+bin:*:3:7:Binaries Commands and Source:/:/usr/sbin/nologin
+tty:*:4:65533:Tty Sandbox:/:/usr/sbin/nologin
+kmem:*:5:65533:KMem Sandbox:/:/usr/sbin/nologin
+games:*:7:13:Games pseudo-user:/usr/games:/usr/sbin/nologin
+news:*:8:8:News Subsystem:/:/usr/sbin/nologin
+man:*:9:9:Mister Man Pages:/usr/share/man:/usr/sbin/nologin
+sshd:*:22:22:Secure Shell Daemon:/var/empty:/usr/sbin/nologin
+smmsp:*:25:25:Sendmail Submission User:/var/spool/clientmqueue:/usr/sbin/nologin
+mailnull:*:26:26:Sendmail Default User:/var/spool/mqueue:/usr/sbin/nologin
+bind:*:53:53:Bind Sandbox:/:/usr/sbin/nologin
+proxy:*:62:62:Packet Filter pseudo-user:/nonexistent:/usr/sbin/nologin
+_pflogd:*:64:64:pflogd privsep user:/var/empty:/usr/sbin/nologin
+_dhcp:*:65:65:dhcp programs:/var/empty:/usr/sbin/nologin
+uucp:*:66:66:UUCP pseudo-user:/var/spool/uucppublic:/usr/sbin/nologin
+pop:*:68:6:Post Office Owner:/nonexistent:/usr/sbin/nologin
+auditdistd:*:78:77:Auditdistd unprivileged user:/var/empty:/usr/sbin/nologin
+www:*:80:80:World Wide Web Owner:/nonexistent:/usr/sbin/nologin
+hast:*:845:845:HAST unprivileged user:/var/empty:/usr/sbin/nologin
+nobody:*:65534:65534:Unprivileged user:/nonexistent:/usr/sbin/nologin
+nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/usr/sbin/nologin
+
+"@
+        } else {
+            $Normal = @"
 
 root:*:0:0:Charlie &:/root:/usr/bin/bash
 nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
@@ -996,6 +1029,7 @@ sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent
 nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent
 
 "@
+        }
         Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C $null -M "Check if new users have been added to the password file."
         Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
@@ -1064,6 +1098,28 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
+        $Normal = @"
+
+nobody    34839  0.0  0.5 114288 38836  ??  S     6:00PM   0:01.73 | |-- /bin/httpd
+nobody    34840  0.0  0.5 114288 38892  ??  S     6:00PM   0:01.86 | |-- /bin/httpd
+nobody    34841  0.0  0.5 120468 43084  ??  S     6:00PM   0:01.34 | |-- /bin/httpd
+nobody    34842  0.0  0.5 120432 41764  ??  S     6:00PM   0:00.67 | |-- /bin/httpd
+nobody    34843  0.0  0.4 114088 34608  ??  I     6:00PM   0:00.00 | `-- /bin/httpd
+root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep nobody
+
+"@
+        Write-Host -ForegroundColor White "`r`nRunning processes for nobody"
+        Write-ToLogFile -I -C $null -M "Running processes for nobody"
+        Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
+        Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
+        Write-Host -ForegroundColor Green $Normal
+        Write-ToLogFile -I -C Example -M $Normal
+        $ShellCommand = 'shell ps auxd | grep nobody'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
         Write-Host -ForegroundColor White "`r`nTop 10 running processes, only NSPPE-xx should have high CPU"
         Write-ToLogFile -I -C $null -M "Top 10 running processes, only NSPPE-xx should have high CPU"
         $ShellCommand = 'shell top -n 10'
@@ -1072,10 +1128,14 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
         "`r`n`r`n"
+        Write-Warning "There might be more/other errors! When in doubt manually view the log files with the following commands:"
+        Write-Warning "shell cat /var/log/httperror.log"
+        Write-Warning "shell gzcat /var/log/httperror.log.*.gz"
+        "`r`n"
         Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
         Write-ToLogFile -W -M "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
         "`r`n`r`n"
-        if (-Not $NoLog){
+        if (-Not $NoLog) {
             Write-Host -ForegroundColor Yellow "Session info saved in log file: $LogFile"
             "`r`n`r`n"
         }

@@ -75,4 +75,11 @@ EXAMPLE
 ```
 NOTE: You can optionaly specify the -Credential <Credential> parameter, if not credential will be asked.
 
+### Unable to load Renci.SshNet
+If you might receive the following error "Could not load file or assembly 'Renci.SshNet'" you can try to execute the following lines and restart your PowerShell Session.
 
+```powershell
+[System.Reflection.Assembly]::Load("System.EnterpriseServices, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a")
+$publish = New-Object System.EnterpriseServices.Internal.Publish
+$publish.GacInstall("C:\Program Files\WindowsPowerShell\Modules\Posh-SSH\2.2\Assembly\Renci.SshNet.dll");
+```
