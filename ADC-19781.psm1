@@ -1075,10 +1075,15 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
         Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
         Write-ToLogFile -W -M "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
         "`r`n`r`n"
+        if (-Not $NoLog){
+            Write-Host -ForegroundColor Yellow "Session info saved in log file: $LogFile"
+            "`r`n`r`n"
+        }
         Write-Host -ForegroundColor White "Finished`r`n"
         Write-ToLogFile -I -C $null -M "Finished"
     } catch {
-    
+        Write-ToLogFile -E -C Connect-ADC -M "Caught an error. Exception Message: $($_.Exception.Message)"
+        Write-Error $_.Exception.Message
     }
 
 }
