@@ -35,8 +35,12 @@ SYNTAX
 ```powershell
 EXAMPLE
     PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local"
+```
+```powershell
 EXAMPLE
     PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local" -LogFile C:\Temp\ADCFindIfHacked.log
+```
+```powershell
 EXAMPLE
     PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local" -NoLog
 ```
