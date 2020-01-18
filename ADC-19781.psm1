@@ -780,14 +780,31 @@ function ADCFindIfHacked {
         [ValidateNotNull()]
         [System.Management.Automation.PSCredential]
         [System.Management.Automation.Credential()]
-        $Credential
+        $Credential,
+
+        [parameter(Mandatory = $false)]
+        [String]$LogFile = "$($Env:TEMP)\ADCFindIfHacked_$((get-date).ToString("yyyyMMdd-HHmmss")).txt",
+
+        [parameter(Mandatory = $false)]
+        [Switch]$NoLog
+
     )
     #requires -version 5.1
+    if ($NoLog) {
+        $Global:LogLevel = "None"
+    } else {
+        $Global:LogFile = $LogFile
+    }
+    Write-ToLogFile -I -C $null -M "Starting ADCFindIfHacked" -NewLog
     try {
         Import-Module Posh-ssh -ErrorAction Stop
+        Write-ToLogFile -I -C Posh-ssh -M "Posh-SSH Module loaded"
     } catch {
         Write-Warning "Please install the PowerShell Module Posh-SSH, execute: `"Install-Module Posh-SSH`""
         Write-Warning "This is required to connect top the Citrix ADC / NetScaler to perform some tests!"
+        Write-ToLogFile -W -C Posh-ssh -M "Please install the PowerShell Module Posh-SSH, execute: `"Install-Module Posh-SSH`""
+        Write-ToLogFile -W -C Posh-ssh -M "This is required to connect top the Citrix ADC / NetScaler to perform some tests!"
+        Write-ToLogFile -I -C Final -M "ADCFindIfHacked closed"
         throw "Posh-SSH not install, please install module Posh-SSH to continue"
     }
 
@@ -808,89 +825,132 @@ NOTE: The script is of my own and not the opinion of my employer!
 
 "@
     $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
+    Write-Host -ForegroundColor White "SSC Connection to `"$($ManagementURL.host)`" Connected: $($SSHSession.Connected)`r`n"
+    Write-ToLogFile -I -C Connection -M "SSC Connection to `"$($ManagementURL.host)`" Connected: $($SSHSession.Connected)`r`n"
     $ShellCommand = 'show version'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     $Versions = (CleanOutput -Data $Output.Output).Replace("`t", "") | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
     $version = "{0}.{1}" -f $versions.Matches.Value[0], $versions.Matches.Value[1]
-    ""
     Write-Warning "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder"
     Write-Warning "and rewrite policies bound to VPN virtual servers causing them not to process the packets that"
     Write-Warning "matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
     Write-Warning "steps to apply properly."
+    Write-ToLogFile -W -C Version -M "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder and rewrite policies bound to VPN virtual servers causing them not to process the packets that matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
     Write-Host -ForegroundColor Yellow "`r`nCurrent version $($ADCSession.Version)`r`n"
+    Write-ToLogFile -W -C Version -M "Current version $($ADCSession.Version)"
     if ($version -like "12.1.*") {
         if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
             Write-Warning "You still might be vulnerable to CVE-2019-19781!"
             Write-Warning "Upgrade to a version higher than 12.1 build 51.16"
+            Write-ToLogFile -W -C Version -M "You still might be vulnerable to CVE-2019-19781!"
+            Write-ToLogFile -W -C Version -M "Upgrade to a version higher than 12.1 build 51.16"
         } else {
             Write-Host "Citrix ADC / NetScaler version OK"
+            Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
+
         }
     } else {
         Write-Host "Citrix ADC / NetScaler version OK"
+        Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
     }
     ""
+    Write-Host -ForegroundColor White  "`r`nThis command should not return any results, if not the NetScaler could possibly be hacked."
+    Write-ToLogFile -I -C $null -M "This command should not return any results, if not the NetScaler could possibly be hacked."
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White  "`r`nThis command should return an error or no files, if not the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
+    Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked."
+    Write-ToLogFile -I -C $null -M "If there are XML files in this folder that are unknown, the NetScaler could possibly be hacked."
     $ShellCommand = 'shell ls /var/vpn/bookmark/*.xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
+    Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked."
+    Write-ToLogFile -I -C $null -M "If there are XML files in this folder that are unknown, the NetScaler could possibly be hacked."
     $ShellCommand = 'shell ls /netscaler/portal/templates/*.xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     Write-Host -ForegroundColor White  "`r`nAttempts to exploit the system leave traces in the Apache httpaccess log files"
+    Write-ToLogFile -I -C $null -M "Attempts to exploit the system leave traces in the Apache httpaccess log files"
 
     Write-Host -ForegroundColor Green  "INFO: Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
+    Write-ToLogFile -I -C Example -M "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
 
     Write-Host -ForegroundColor White  "`r`nChecking Apache httpaccess log files"
+    Write-ToLogFile -I -C $null -M "Checking Apache httpaccess log files"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell cat /var/log/httpaccess.log | grep "/\.\./"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep vpns | grep xml'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep "/\.\./"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell cat /var/log/bash.log | grep nobody'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
+    Write-ToLogFile -I -C $null -M "Bash logs, commands running as nobody could indicate an attack."
     Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
+    Write-ToLogFile -W -M "Beware, these logs rotate rather quickly (1-2 days)"
     Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $ShellCommand = 'shell gzcat /var/log/bash.*.gz | grep nobody'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n(shell gzcat /var/log/bash.*.gz | grep nobody):"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack. `r`nNOTE: But beware, these logs rotate rather quickly (1-2 days)`r`n($ShellCommand):"
+    Write-ToLogFile -I -C $null -M "Bash logs, commands running as nobody could indicate an attack."
+    Write-ToLogFile -W -M "NOTE: But beware, these logs rotate rather quickly (1-2 days)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $Normal = @"
 
@@ -909,14 +969,19 @@ HOME=/var/log
 49       0-23       *       *       *       root    nslog.sh dozip
 
 "@
-    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
-    Write-Host -ForegroundColor Green $Normal
 
-    
+    Write-Host -ForegroundColor White "`r`ncrontab details"
+    Write-ToLogFile -I -C $null -M "crontab details"
+    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
+    Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
+    Write-Host -ForegroundColor Green $Normal
+    Write-ToLogFile -I -C Example -M $Normal
     $ShellCommand = 'shell cat /etc/crontab'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White "`r`ncrontab Output`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $Normal = @"
 
@@ -930,12 +995,17 @@ sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent
 nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent
 
 "@
+    Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
+    Write-ToLogFile -I -C $null -M "Check if new users have been added to the password file."
+    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
+    Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
+    Write-Host -ForegroundColor Green $Normal
+    Write-ToLogFile -I -C Example -M $Normal
     $ShellCommand = 'shell cat /etc/passwd'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
-    Write-Host -ForegroundColor Green $Normal
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $OutputUsers = ($Output.Output)
     $Users = @()
@@ -943,12 +1013,15 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
         $Users += $OutputUsers[$i].Split(":")[0]
     }
     
-    Write-Host -ForegroundColor White "Check if users have cron jobs assigned.`r`nThe ERROR response just means that these users have no cron jobs assigned, which is normal behavior."
+    Write-Host -ForegroundColor White "Check if users have cron jobs assigned."
+    Write-ToLogFile -I -C $null -M "Check if users have cron jobs assigned."
     ForEach ($User in $Users) {
         $ShellCommand = $("shell crontab -u {0} -l" -f $User)
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
-        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
     }
     
     $Normal = @"
@@ -957,12 +1030,17 @@ root      12507  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps
 root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
 
 "@
+    Write-Host -ForegroundColor White "`r`npython scripts"
+    Write-ToLogFile -I -C $null -M "python scripts"
+    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
+    Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
+    Write-Host -ForegroundColor Green $Normal
+    Write-ToLogFile -I -C Example -M $Normal
     $ShellCommand = 'shell ps -aux | grep python'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White "`r`npython scripts`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
-    Write-Host -ForegroundColor Green $Normal
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
     $Normal = @"
 
@@ -973,20 +1051,30 @@ root      12510  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps
 root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
 
 "@
+    Write-Host -ForegroundColor White "`r`nperl scripts"
+    Write-ToLogFile -I -C $null -M "perl scripts"
+    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
+    Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
+    Write-Host -ForegroundColor Green $Normal
+    Write-ToLogFile -I -C Example -M $Normal
     $ShellCommand = 'shell ps -aux | grep perl'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White "`r`nperl scripts`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare (not all scripts are bad, if in doubt verify)."
-    Write-Host -ForegroundColor Green $Normal
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
+    Write-Host -ForegroundColor White "`r`nTop 10 running processes, only NSPPE-xx should have high CPU"
+    Write-ToLogFile -I -C $null -M "Top 10 running processes, only NSPPE-xx should have high CPU"
     $ShellCommand = 'shell top -n 10'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-    Write-Host -ForegroundColor White "`r`nTop 10 running processes, only NSPPE-xx should have high CPU`r`nCommand Executed: '$ShellCommand':"
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$(CleanOutput -Data $Output.Output | Out-String)"
-
-
-    Write-Host -ForegroundColor White "Finished`r`n"
-    Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
+    Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+    Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+    Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
     "`r`n`r`n"
+    Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
+    Write-ToLogFile -W -M "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
+    "`r`n`r`n"
+    Write-Host -ForegroundColor White "Finished`r`n"
+    Write-ToLogFile -I -C $null -M "Finished"
+
 }

@@ -9,13 +9,40 @@ Download the two files (ADC-19781.psd1 & ADC-19781.psm1) and put them in one of 
 
 ## Import Module
 ```powershell
-Get-Module ADC-19781
+Import-Module ADC-19781
 ```
 
 There are three main functions:
+- ADCFindIfHacked
 - ADCTestExploit
 - ADCCheckMitigation
-- ADCFindIfHacked
+
+### ADCFindIfHacked
+Execute some test to find out if you are possibly hacked, this wil not give 100% certanty.
+This is based on currently known facts.
+
+This function requires the use of [Posh-SSH](https://www.powershellgallery.com/packages/Posh-SSH), please install before use.
+
+```powershell
+Install-Module Posh-SSH
+```
+
+```powershell
+SYNTAX
+    ADCFindIfHacked [-ManagementURL] <uri> [[-TimeOut] <int>] [-Credential] <pscredential> [[-LogFile] <string>] [-NoLog]
+```
+
+```powershell
+EXAMPLE
+    PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local"
+EXAMPLE
+    PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local" -LogFile C:\Temp\ADCFindIfHacked.log
+EXAMPLE
+    PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local" -NoLog
+```
+NOTE: You can optionaly specify the -Credential <Credential> parameter, if not credential will be asked.
+NOTE: You can change the logfile location with the -LogFile Parameter or -NoLog if you don't want a logfile. By default a logfile "ADCFindIfHacked_yyyyMMdd-HHmmss.txt" will be created.
+NOTE: If you have TimeOut issues you can specify the -TimeOut parameter, default value 300.
 
 ### ADCTestExploit
 External test to check if you have successfully applied the mitigation
@@ -44,24 +71,4 @@ EXAMPLE
 ```
 NOTE: You can optionaly specify the -Credential <Credential> parameter, if not credential will be asked.
 
-### ADCFindIfHacked
-Execute some test to find out if you are possibly hacked, this wil not give 100% certanty.
-This is based on currently known facts.
-
-This function requires the use of [Posh-SSH](https://www.powershellgallery.com/packages/Posh-SSH), please install before use.
-
-```powershell
-Install-Module Posh-SSH
-```
-
-```powershell
-SYNTAX
-    ADCFindIfHacked [-ManagementURL] <uri> [-Credential] <pscredential>
-```
-
-```powershell
-EXAMPLE
-    PS C:\> ADCFindIfHacked -ManagementURL "https://citrixnetscaler.domain.local"
-```
-NOTE: You can optionaly specify the -Credential <Credential> parameter, if not credential will be asked.
 
