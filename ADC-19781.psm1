@@ -767,6 +767,43 @@ function ADCCheckMitigation {
 
 
 function ADCFindIfHacked {
+    <#
+.SYNOPSIS
+    Check you adc for possible hack attempts
+.DESCRIPTION
+    Check you adc for possible hack attempts. Please visit the following sites for more information and explanations:
+    http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
+    https://nerdscaler.com/2020/01/13/citrix-adc-cve-2019-19781-exploited-what-now/amp/
+    https://isc.sans.edu/forums/diary/Citrix+ADC+Exploits+are+Public+and+Heavily+Used+Attempts+to+Install+Backdoor/25700
+    https://isc.sans.edu/forums/diary/Some+Thoughts+About+the+Critical+Citrix+ADCGateway+Vulnerability+CVE201919781/25660
+.PARAMETER ManagementURL
+    The URL of the management interface
+    PS C:\>ADCFindIfHacked -ManagementURL "https://192.168.10.11"
+.PARAMETER TimeOut
+    The URL of the management interface
+    PS C:\>ADCFindIfHacked -ManagementURL "https://192.168.10.11" -TimeOut 400
+.PARAMETER Credential
+    You can specify a credential object with this parameter. If non is specified a popup wil be shown.
+    PS C:\>$Credential = Get-Credential nsroot
+    PS C:\>ADCFindIfHacked -ManagementURL "https://192.168.10.11" -Credential $Credential
+.PARAMETER LogFile
+    Specify a custom path for your log file
+    PS C:\>ADCFindIfHacked -ManagementURL "https://192.168.10.11" -LogFile "c:\Temp\Logfile.txt"
+.PARAMETER LogFile
+    Specify this parameter if you don't want a log file
+    PS C:\>ADCFindIfHacked -ManagementURL "https://192.168.10.11" -NoLog
+.EXAMPLE
+    PS C:\> ADCCheckMitigation -ManagementURL "https://cns001.domain.local"
+    Executing all check on Citrix ADC / NetScaler "cns001.domain.local" via https
+.NOTES
+    Function Name : ADCFindIfHacked.ps1
+    Version       : v0.7.1
+    Author        : John Billekens
+    Requires      : PowerShell v5.1 and up
+                    Posh-SSH (v2.2)
+.LINK
+    https://github.com/j81blog/ADC-19781
+#>
     [cmdletbinding()]
     param(
         [parameter(Mandatory = $true)]
@@ -937,7 +974,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
         Write-ToLogFile -I -C $null -M "Bash logs, commands running as nobody could indicate an attack."
-        Write-Host -ForegroundColor Green  "INFO: Messages like `"<Local7.notice> ns bash[3632]: nobody on (null) shell_command=`"uname -a`"`" could indicate a hack attempt"
+        Write-Host -ForegroundColor Green  "INFO: Messages like `r`n<Local7.notice> ns bash[3632]: nobody on (null) shell_command=`"uname -a`"`r`ncould indicate a hack attempt."
         Write-ToLogFile -I -C Example -M "Messages like `"<Local7.notice> ns bash[3632]: nobody on (null) shell_command=`"uname -a`"`" could indicate a hack attempt"
         Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
         Write-ToLogFile -W -M "Beware, these logs rotate rather quickly (1-2 days)"
@@ -1128,16 +1165,23 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
         "`r`n`r`n"
-        Write-Warning "There might be more/other errors! When in doubt manually view the log files with the following commands:"
-        Write-Warning "shell cat /var/log/httperror.log"
-        Write-Warning "shell gzcat /var/log/httperror.log.*.gz"
+        Write-Warning "There might be more/other errors!`r`nWhen in doubt manually view the log files with the following commands:`r`nshell cat /var/log/httperror.log`r`nshell gzcat /var/log/httperror.log.*.gz"
+        Write-ToLogFile -W -C Important-M "There might be more/other errors!"
+        Write-ToLogFile -W -C Important -M "When in doubt manually view the log files with the following commands:"
+        Write-ToLogFile -W -C Important -M "shell cat /var/log/httperror.log"
+        Write-ToLogFile -W -C Important -M "shell gzcat /var/log/httperror.log.*.gz"
         "`r`n"
         Write-Warning "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
-        Write-ToLogFile -W -M "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
+        Write-ToLogFile -W -C Important -M "Please also check Firewall logs! Attackers might use a compromised NetScaler as a jump host."
         "`r`n`r`n"
         if (-Not $NoLog) {
             Write-Host -ForegroundColor Yellow "Session info saved in log file: $LogFile"
             "`r`n`r`n"
+        }
+        if (Remove-SSHSession -SessionId $($SSHSession.SessionId)) {
+            Write-ToLogFile -I -C Posh-SSH -M "Sucessfully disconnected."
+        } else {
+            Write-ToLogFile -E -C Posh-SSH -M "Posh-SSH NOT disconnected."
         }
         Write-Host -ForegroundColor White "Finished`r`n"
         Write-ToLogFile -I -C $null -M "Finished"
