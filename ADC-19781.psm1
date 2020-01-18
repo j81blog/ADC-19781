@@ -117,7 +117,8 @@ function Ignore-SSLCertificates {
     ## We create an instance of TrustAll and attach it to the ServicePointManager
     $TrustAll = $TAAssembly.CreateInstance("Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll")
     [System.Net.ServicePointManager]::CertificatePolicy = $TrustAll
-    [Net.ServicePointManager]::SecurityProtocol = 'TLS11', 'TLS12', 'ssl3'
+    $AllProtocols = [Enum]::GetValues([System.Net.SecurityProtocolType])
+    [System.Net.ServicePointManager]::SecurityProtocol = $AllProtocols
 }
 
 function Invoke-ADCRestApi {
@@ -425,7 +426,7 @@ function ADCFindIfHacked {
     } catch {
         Write-Warning "Please install the PowerShell Module Posh-SSH, execute: `"Install-Module Posh-SSH`""
         Write-Warning "This is required to connect top the Citrix ADC / NetScaler to perfom some tests!"
-        Exit 1
+        throw "Posh-SSH not install, please install module Posh-SSH to continue"
     }
 
     Write-Warning @"
@@ -444,15 +445,16 @@ NOTE: The script is of my own and not the opinion of my employer!
 
 
 "@
-    $ADCSession = Connect-ADC -ManagementURL $($ManagementURL.AbsoluteUri.TrimEnd("/")) -Credential $Credential -PassThru
+    $ShellCommand = 'show version'
+    $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+    $Versions = ($Output.Output).TrimStart(" Done`r`n").Replace("`t", "") | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
+    $version = "{0}.{1}" -f $versions.Matches.Value[0], $versions.Matches.Value[1]
     ""
     Write-Warning "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder"
     Write-Warning "and rewrite policies bound to VPN virtual servers causing them not to process the packets that"
     Write-Warning "matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
     Write-Warning "steps to apply properly."
     Write-Host -ForegroundColor Yellow "`r`nCurrent version $($ADCSession.Version)`r`n"
-    $versions = $ADCSession.Version | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
-    $version = "{0}.{1}" -f $versions.Matches.Value[0], $versions.Matches.Value[1]
     if ($version -like "12.1.*") {
         if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
             Write-Warning "You still might be vulnerable to CVE-2019-19781!"
@@ -464,7 +466,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host "Citrix ADC / NetScaler version OK"
     }
     ""
-    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential -AcceptKey
+    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
 
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
@@ -483,7 +485,7 @@ NOTE: The script is of my own and not the opinion of my employer!
 
     Write-Host -ForegroundColor White  "`r`nAttempts to exploit the system leave traces in the Apache httpaccess log files"
 
-    Write-Warning  "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
+    Write-Host -ForegroundColor Green  "INFO: Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
 
     Write-Host -ForegroundColor White  "`r`nChecking Apache httpaccess log files"
 
@@ -521,6 +523,7 @@ NOTE: The script is of my own and not the opinion of my employer!
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
     Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
+    Write-Information
     Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
