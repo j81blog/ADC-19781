@@ -420,7 +420,7 @@ function ADCFindIfHacked {
         $Credential
     )
     #requires -version 5.1
-    Ignore-SSLCertificates
+    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
     try {
         Import-Module Posh-ssh -ErrorAction Stop
     } catch {
@@ -466,8 +466,6 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host "Citrix ADC / NetScaler version OK"
     }
     ""
-    $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
-
     $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White  "`r`nThis command should return an error or no files, if not the NetScaler could possibly be hacked.`r`nCommand Executed: '$ShellCommand':"
@@ -523,7 +521,6 @@ NOTE: The script is of my own and not the opinion of my employer!
     $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
     Write-Host -ForegroundColor White "`r`nBash logs, commands running as nobody could indicate an attack."
     Write-Warning "Beware, these logs rotate rather quickly (1-2 days)"
-    Write-Information
     Write-Host -ForegroundColor White "Command Executed: '$ShellCommand':"
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "$($Output.Output | Out-String)"
 
