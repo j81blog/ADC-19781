@@ -876,8 +876,8 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Warning "matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
         Write-Warning "steps to apply properly."
         Write-ToLogFile -W -C Version -M "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder and rewrite policies bound to VPN virtual servers causing them not to process the packets that matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
-        Write-Host -ForegroundColor Yellow "`r`nCurrent version $($ADCSession.Version)`r`n"
-        Write-ToLogFile -W -C Version -M "Current version $($ADCSession.Version)"
+        Write-Host -ForegroundColor White "`r`nCurrent version $((CleanOutput -Data $Output.Output).Replace('`t', ''))`r`n"
+        Write-ToLogFile -W -C Version -M "Current version $((CleanOutput -Data $Output.Output).Replace('`t', ''))"
         if ($version -like "12.1.*") {
             if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
                 Write-Warning "You still might be vulnerable to CVE-2019-19781!"
@@ -894,9 +894,38 @@ NOTE: The script is of my own and not the opinion of my employer!
             Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
         }
 
-        Write-Host -ForegroundColor White  "`r`nThis command should not return any results, if not the NetScaler could possibly be hacked."
+        $badips = @"
+Lookout for the following IP's and scipts. These are indications of a hack.
+hxxp://185.178.45.221/ci2.sh
+hxxp://62.113.112.33/ci.sh
+hxxp://185.178.45.221/ci.sh
+Miner:
+hxxp://217.12.221.12/netscalerd
+193.187.174.104
+359328.selcdn.ru
+188.120.254.224
+46.229.215.164
+62.113.112.127
+0e431d0d9e0fc371c163e4de5226c50b – ci.sh
+5be9abbe208a1e03ef3def7f9fa816d3 – netscalerd
+568f7b1d6c2239e208ba97886acc0b1e – nspps
+1c8c28e4db5ad7773da363146b10a340
+        
+"@
+        Write-Host -ForegroundColor Green  "`r`n$badips"
+        Write-ToLogFile -I -C Example -M $badips
+        Write-Host -ForegroundColor White  "`r`nThis command should not return any results, if so the NetScaler could possibly be hacked."
         Write-ToLogFile -I -C $null -M "This command should not return any results, if not the NetScaler could possibly be hacked."
         $ShellCommand = 'shell ls /var/tmp/netscaler/portal/templates'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        Write-Host -ForegroundColor White  "`r`nThis command should not return any results, if so the NetScaler could possibly be hacked."
+        Write-ToLogFile -I -C $null -M "This command should not return any results, if not the NetScaler could possibly be hacked."
+        $ShellCommand = 'shell ls /var/tmp/.netscalerd/uuid'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
@@ -924,8 +953,18 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host -ForegroundColor White  "`r`nAttempts to exploit the system leave traces in the Apache httpaccess log files"
         Write-ToLogFile -I -C $null -M "Attempts to exploit the system leave traces in the Apache httpaccess log files"
 
-        Write-Host -ForegroundColor Green  "INFO: Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
-        Write-ToLogFile -I -C Example -M "Messages like `"GET /vpn/../vpns/portal/blkisazodfssy.xml HTTP/1.1`" could indicate a hack attempt"
+        $Example = @"
+INFO: Message like the following can indicate a successful hack attempt:
+
+193.187.174.104 - - [12/Jan/2020:11:26:02 +0000] "GET /vpn/../vpns/cfg/smb.conf HTTP/1.1" 200 83 "-"
+193.187.174.104 - - [12/Jan/2020:11:26:03 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"
+193.187.174.104 - - [12/Jan/2020:11:26:04 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"
+193.187.174.104 - - [12/Jan/2020:11:26:05 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"
+193.187.174.104 - - [12/Jan/2020:11:26:11 +0000] "GET /vpn/../vpns/portal/AOUnCfwrjIJrpngpwLXHddqADAxTraBan.xml HTTP/1.1" 200 - "-"
+
+"@       
+        Write-Host -ForegroundColor Green  $Example
+        Write-ToLogFile -I -C Example -M $Example
 
         Write-Host -ForegroundColor White  "Checking Apache httpaccess log files"
         Write-ToLogFile -I -C $null -M "Checking Apache httpaccess log files"
@@ -937,13 +976,6 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
-        $ShellCommand = 'shell cat /var/log/httpaccess.log | grep "/\.\./"'
-        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
-        Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
-        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
-        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
-        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
-
         $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep vpns | grep xml'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
@@ -951,7 +983,56 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
+        $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep "/\.\./"'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep vpns | grep "/\.\./"'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        $ShellCommand = 'shell cat /var/log/httpaccess.log | grep "/\.\./"'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
         $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep "/\.\./"'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep newbm.pl'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep vpns | grep newbm.pl'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        $ShellCommand = 'shell cat /var/log/httpaccess.log | grep newbmnnn.pl'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        $ShellCommand = 'shell gzcat /var/log/httpaccess.log.*.gz | grep newbmnnn.pl'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White  "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
@@ -1087,7 +1168,10 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
         $OutputUsers = ($Output.Output)
         $Users = @()
         for ($i = 1; $i -lt ($OutputUsers.Count - 1); $i++) {
-            $Users += $OutputUsers[$i].Split(":")[0]
+            $User = $OutputUsers[$i].Split(":")[0]
+            if ((-Not ($User -like " Done")) -and (-Not ($User -like "#*"))) {
+                $Users += $User
+            }
         }
     
         Write-Host -ForegroundColor White "Check if users have cron jobs assigned."
