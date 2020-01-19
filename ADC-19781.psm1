@@ -858,6 +858,7 @@ Sources:
 - https://isc.sans.edu/forums/diary/Citrix+ADC+Exploits+are+Public+and+Heavily+Used+Attempts+to+Install+Backdoor/25700
 - https://ctxpro.com/are-people-mining-bitcoin-on-your-netscaler-adc-using-cve-2019-19781/
 - http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
+- https://www.trustedsec.com/blog/netscaler-honeypot/
 
 NOTE: The script is of my own and not the opinion of my employer!
 
@@ -878,6 +879,24 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-ToLogFile -W -C Version -M "In Citrix ADC Release 12.1 builds before 51.16/51.19 and 50.31, a bug exists that affects responder and rewrite policies bound to VPN virtual servers causing them not to process the packets that matched policy rules. Citrix recommends customers update to an unaffected build for the mitigation"
         Write-Host -ForegroundColor White "`r`nCurrent version $((CleanOutput -Data $Output.Output).Replace('`t', ''))`r`n"
         Write-ToLogFile -W -C Version -M "Current version $((CleanOutput -Data $Output.Output).Replace('`t', ''))"
+
+        if ((([version]$version).Major -eq 11) -and (([version]$version).Minor -eq 1) -and ([version]$version -lt [version]"11.1.63.15")) {
+            ""
+            Write-Warning "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
+            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
+            Write-ToLogFile -W -C Version -M "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
+            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
+            ""
+        }
+        if ((([version]$version).Major -eq 12) -and (([version]$version).Minor -eq 0) -and ([version]$version -lt [version]"12.0.63.13")) {
+            ""
+            Write-Warning "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
+            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
+            Write-ToLogFile -W -C Version -M "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
+            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
+            ""
+        }
+
         if ($version -like "12.1.*") {
             if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
                 Write-Warning "You still might be vulnerable to CVE-2019-19781!"
@@ -1284,6 +1303,24 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         } else {
             Write-ToLogFile -E -C Posh-SSH -M "Posh-SSH NOT disconnected."
         }
+
+        if ((([version]$version).Major -eq 11) -and (([version]$version).Minor -eq 1) -and ([version]$version -lt [version]"11.1.63.15")) {
+            ""
+            Write-Warning "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
+            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
+            Write-ToLogFile -W -C Version -M "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
+            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
+            ""
+        }
+        if ((([version]$version).Major -eq 12) -and (([version]$version).Minor -eq 0) -and ([version]$version -lt [version]"12.0.63.13")) {
+            ""
+            Write-Warning "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
+            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
+            Write-ToLogFile -W -C Version -M "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
+            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
+            ""
+        }
+
         Write-Host -ForegroundColor White "Finished`r`n"
         Write-ToLogFile -I -C $null -M "Finished"
     } catch {
