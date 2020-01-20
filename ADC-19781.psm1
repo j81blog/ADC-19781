@@ -4,6 +4,7 @@
 #https://isc.sans.edu/forums/diary/Citrix+ADC+Exploits+are+Public+and+Heavily+Used+Attempts+to+Install+Backdoor/25700
 #https://isc.sans.edu/forums/diary/Some+Thoughts+About+the+Critical+Citrix+ADCGateway+Vulnerability+CVE201919781/25660
 #http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
+#https://www.jeroenvanroon.nl/controles-op-aanvallen-voor-citrix-netscaler-cve-2019-19781/
 
 
 function Ignore-SSLCertificates {
@@ -1284,6 +1285,55 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        Write-Host -ForegroundColor White "`r`nChanges in the Templates folder on the Citrix ADC / NetScaler since 01-01-2020. Analyse for unknown changes."
+        Write-ToLogFile -I -C $null -M "Changes in the Templates folder on the Citrix ADC / NetScaler since 01-01-2020. Analyse for unknown changes."
+        Write-Host -ForegroundColor Green "INFO: Reboot can also change certain files! Be aware, application of the mitigation triggered a reboot."
+        Write-ToLogFile -I -C $null -M "Reboot can also change certain files! Be aware, application of the mitigation triggered a reboot."
+        $ShellCommand = 'shell find /netscaler/portal/templates -newermt "2020-01-01"'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
+        Write-Host -ForegroundColor White "`r`nChanges on the Citrix ADC / NetScaler since 01-01-2020. Analyse for unknown changes."
+        Write-ToLogFile -I -C $null -M "Changes on the Citrix ADC / NetScaler since 01-01-2020. Analyse for unknown changes."
+        $ShellCommand = 'shell (find /netscaler -newermt "2020-01-01" -type f -print0 | xargs -0 /bin/ls -ltr)'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+        
+        $normal = @"
+
+NetScaler v11.1:
+MD5 (/netscaler/portal/scripts/PersonalBookmark.pl) = d45a1c4924170e2c398831676a3b8102
+MD5 (/netscaler/portal/scripts/logout.pl) = 2a2b40bfdedfc8b4ba56c280994d8d37
+MD5 (/netscaler/portal/scripts/navthemes.pl) = 9926d0a20e179756daeb4688c8a03b37
+MD5 (/netscaler/portal/scripts/newbm.pl) = 0591c29843bc5a48368ed06c23a3733a
+MD5 (/netscaler/portal/scripts/picktheme.pl) = 575f21c82bd84aa458466e0c378d9abc
+MD5 (/netscaler/portal/scripts/rmbm.pl) = 85b99d94aa01718e1ce830cd86c2d2ff
+MD5 (/netscaler/portal/scripts/savecolorprefs.pl) = b7d799e6c6a293de2fd42e524ea44e62
+MD5 (/netscaler/portal/scripts/subscription.pl) = bb959a65984bad31acd925312d12de8f
+MD5 (/netscaler/portal/scripts/themes.pl) = 5fcb189ac8c557ab1d956e612dae0a05
+MD5 (/netscaler/portal/scripts/tips.pl) = 3280ba3ab11a34077885f9de1beb1c92
+
+"@
+        Write-Host -ForegroundColor White "`r`nValidate the file hashes of the perl scripts."
+        Write-ToLogFile -I -C $null -M "Validate the file hashes of the perl scripts."
+        Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
+        Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
+        Write-Host -ForegroundColor Green $Normal
+        Write-ToLogFile -I -C Example -M $Normal
+        $ShellCommand = 'shell md5 /netscaler/portal/scripts/*'
+        $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+        Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
+        Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
+        Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
+        Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
+
         "`r`n`r`n"
         Write-Warning "There might be more/other errors!`r`nWhen in doubt manually view the log files with the following commands:`r`nshell cat /var/log/httperror.log`r`nshell gzcat /var/log/httperror.log.*.gz"
         Write-ToLogFile -W -C Important-M "There might be more/other errors!"
