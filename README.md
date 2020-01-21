@@ -12,9 +12,8 @@ Download the two files (ADC-19781.psd1 & ADC-19781.psm1) and put them in one of 
 Import-Module ADC-19781
 ```
 
-There are three main functions:
+There are two main functions:
 - ADCFindIfHacked
-- ADCTestExploit
 - ADCCheckMitigation
 
 ### ADCFindIfHacked
@@ -48,19 +47,6 @@ NOTE: You can optionaly specify the -Credential <Credential> parameter, if not c
 NOTE: You can change the logfile location with the -LogFile Parameter or -NoLog if you don't want a logfile. By default a logfile "ADCFindIfHacked_yyyyMMdd-HHmmss.txt" will be created.
 NOTE: If you have TimeOut issues you can specify the -TimeOut parameter, default value 300.
 
-### ADCTestExploit
-External test to check if you have successfully applied the mitigation
-
-```powershell
-SYNTAX
-    ADCTestExploit [-Uri] <string>
-```
-
-```powershell
-EXAMPLE
-    PS C:\> ADCTestExploit -Uri "gateway.domain.com"
-```
-
 ### ADCCheckMitigation
 Check the Citrix ADC / NetScaler to verify if the mitigation is in place
 
@@ -71,7 +57,7 @@ SYNTAX
 
 ```powershell
 EXAMPLE
-    PS C:\> ADCCheckMitigation -ManagementURL "https://citrixnetscaler.domain.local"
+    PS C:\> ADCCheckMitigation -ManagementURL "https://cns001.domain.local"
 ```
 NOTE: You can optionaly specify the -Credential <Credential> parameter, if not credential will be asked.
 

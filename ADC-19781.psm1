@@ -629,45 +629,8 @@ function ADCTestExploit {
         [switch]$PassThru
 
     )
-    #requires -version 5.1
-    Ignore-SSLCertificates
-    $return = $false
-    $exception = $null
-    $params = @{
-        "Uri"       = "$Uri/vpns/cfg/smb.conf"
-        "Method"    = "GET"
-        "UserAgent" = "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:52.0) Gecko/20100101 Firefox/52.0"
-        "Headers"   = @{
-            "Accept"                    = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-            "Accept-Language"           = "zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0."
-            "Accept-Encoding"           = "gzip, deflat"
-            "DNT"                       = 1
-            "NSC_USER"                  = "admin4123"
-            "NSC_NONCE"                 = "123456"
-            "NSC_CLIENTTYPE"            = "123"
-            "Upgrade-Insecure-Requests" = 1  
-        }     
-    }
-    try {
-        $null = Invoke-RestMethod @params
-        Write-Host -ForegroundColor Red "Mitigation NOT applied, got StatusCode: $($_.Exception.Response.StatusCode.value__)" -ErrorAction Stop
-        $return = $false
-    } catch {
-        $exception = $_
-        if (($_.Exception.Response.StatusCode -eq [System.Net.HttpStatusCode]403) -or ($_.Exception.Response.StatusCode -eq [System.Net.HttpStatusCode]404)) {
-            
-            Write-Host -ForegroundColor Green "Mitigation applied, got StatusCode: $($_.Exception.Response.StatusCode.value__)"
-            $return = $true
-        } else {
-            Write-Host -ForegroundColor Red "Mitigation NOT applied, got StatusCode: $($_.Exception.Response.StatusCode.value__) Host could also not be valid, visit https://support.citrix.com/article/CTX267027"
-            $return = $false
-        }
-    }
-    if ($PassThru) { 
-        return $exception 
-    } else { 
-        return $return 
-    }
+    Write-Warning "This test is not usable anymore"
+    Write-Warning "Verify using the Citrix verification tool: https://support.citrix.com/article/CTX269180"
     
 }
 
