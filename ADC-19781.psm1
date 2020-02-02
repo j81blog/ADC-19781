@@ -924,7 +924,9 @@ hxxp://217.12.221.12/netscalerd`r
         Write-ToLogFile -I -C Output -M "`r`n$(CleanOutput -Data $Output.Output | Out-String)"
 
         Write-Host -ForegroundColor White  "`r`nIf there are XML files in this folder that are unknown, the NetScaler could possibly be hacked."
+        Write-Host -ForegroundColor White  "Bookmarks like `"/var/vpn/bookmark/bm_prefix_am9obi5iaWxsZWtlbnNAZG9tYWluLmNvbQ==`" could be valid, `r`ncheck the part after `"bm_prefix_`" this is base64 encoded."
         Write-ToLogFile -I -C $null -M "If there are XML files in this folder that are unknown, the NetScaler could possibly be hacked."
+        Write-ToLogFile -I -C $null -M "Bookmarks like `"/var/vpn/bookmark/bm_prefix_am9obi5iaWxsZWtlbnNAZG9tYWluLmNvbQ==`" could be valid, check the part after `"bm_prefix_`" this is base64 encoded."
         $ShellCommand = 'shell ls /var/vpn/bookmark/*.xml'
         $Output = Invoke-SSHCommand -Index $($SSHSession.SessionId) -Command $ShellCommand -TimeOut $TimeOut
         Write-Host -ForegroundColor White "`r`nCommand Executed: '$ShellCommand':"
